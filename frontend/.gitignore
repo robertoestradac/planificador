@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+*.log
+dist/
+out/
+
+# Cache de Next.js
+.next/cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

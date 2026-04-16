@@ -1,0 +1,280 @@
+/* ===================================================
+   InvitApp Builder — Global Styles & Animations
+   =================================================== */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Typography Engine ── */
+.section-typography-wrapper {
+  font-family: var(--text-font, inherit);
+}
+.section-typography-wrapper h1,
+.section-typography-wrapper h2,
+.section-typography-wrapper h3,
+.section-typography-wrapper h4,
+.section-typography-wrapper h5,
+.section-typography-wrapper h6 {
+  font-family: var(--title-font, inherit) !important;
+}
+
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@300;400;600;700&family=Dancing+Script:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Raleway:wght@300;400;600&family=Lato:wght@300;400;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 330 81% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 50% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 270 30% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 330 81% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 270 20% 90%;
+    --input: 270 20% 90%;
+    --ring: 330 81% 60%;
+    --radius: 0.75rem;
+
+    /* Builder-specific */
+    --builder-bg: #f0edf9;
+    --builder-canvas-bg: #ffffff;
+    --builder-accent: #FF4D8F;
+    --builder-accent-hover: #e6447e;
+    --builder-toolbar-bg: rgba(255,255,255,0.95);
+    --builder-toolbar-shadow: 0 -2px 20px rgba(0,0,0,0.08), 0 8px 30px rgba(0,0,0,0.12);
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}
+
+/* ── Builder canvas background ── */
+.builder-bg {
+  background-color: var(--builder-bg);
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255,77,143,0.06) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(124,58,237,0.05) 0%, transparent 50%);
+}
+
+/* ── Smooth drawer animation ── */
+.drawer-enter {
+  animation: drawerUp 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.drawer-exit {
+  animation: drawerDown 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.drawer-right-enter {
+  animation: drawerRightIn 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+@keyframes drawerUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes drawerDown {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+@keyframes drawerRightIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── Modal animation ── */
+.modal-enter {
+  animation: modalIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes modalIn {
+  from { transform: scale(0.95) translateY(8px); opacity: 0; }
+  to   { transform: scale(1) translateY(0);       opacity: 1; }
+}
+
+/* ── Floating toolbar ── */
+.builder-toolbar {
+  background: var(--builder-toolbar-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--builder-toolbar-shadow);
+  border: 1px solid rgba(255,255,255,0.8);
+}
+
+/* ── Section hover effects in canvas ── */
+.section-hover-ring {
+  transition: outline 0.15s ease, outline-offset 0.15s ease;
+}
+.section-hover-ring:hover {
+  outline: 2px solid rgba(255, 77, 143, 0.4);
+  outline-offset: 0;
+}
+.section-hover-ring.selected {
+  outline: 2px solid #FF4D8F;
+  outline-offset: 0;
+}
+
+/* ── Block card in add-block modal ── */
+.block-card {
+  transition: all 0.18s ease;
+  cursor: pointer;
+}
+.block-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(255,77,143,0.2);
+  border-color: #FF4D8F;
+}
+
+/* ── Scrollbar custom ── */
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 99px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+/* ── Invitation public page animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes bounceIn {
+  0%   { opacity: 0; transform: scale(0.3); }
+  50%  { opacity: 1; transform: scale(1.05); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14%       { transform: scale(1.1); }
+  28%       { transform: scale(1); }
+  42%       { transform: scale(1.1); }
+  70%       { transform: scale(1); }
+}
+
+.animate-section {
+  opacity: 0;
+  transition: none;
+}
+.animate-section.is-visible {
+  opacity: 1;
+}
+.anim-fade-up.is-visible     { animation: fadeInUp 0.7s ease forwards; }
+.anim-fade.is-visible        { animation: fadeIn 0.6s ease forwards; }
+.anim-slide-left.is-visible  { animation: slideInLeft 0.7s ease forwards; }
+.anim-slide-right.is-visible { animation: slideInRight 0.7s ease forwards; }
+.anim-zoom.is-visible        { animation: zoomIn 0.6s ease forwards; }
+.anim-bounce.is-visible      { animation: bounceIn 0.8s ease forwards; }
+
+/* ── Disk spin animation ── */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.spin-slow { animation: spinSlow 8s linear infinite; }
+
+/* ── Pulse glow ── */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 15px rgba(255,77,143,0.3); }
+  50%       { box-shadow: 0 0 30px rgba(255,77,143,0.6); }
+}
+.pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+
+/* ── Gradient text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #FF4D8F, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Glass card ── */
+.glass-card {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.8);
+}
+
+/* ── Builder phone frame ── */
+.phone-frame {
+  border-radius: 44px;
+  border: 8px solid #1a1a2e;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.1),
+    0 30px 80px rgba(0,0,0,0.35),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+  position: relative;
+  overflow: hidden;
+}
+.phone-frame::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 100px; height: 28px;
+  background: #1a1a2e;
+  border-radius: 0 0 20px 20px;
+  z-index: 999;
+}
+.phone-frame-notch {
+  height: 28px;
+  background: #1a1a2e;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+}
+.phone-frame-notch::after {
+  content: '';
+  width: 80px; height: 16px;
+  background: #111;
+  border-radius: 0 0 16px 16px;
+}
+
+/* ── Tooltip ── */
+.tooltip {
+  position: relative;
+}
+.tooltip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tooltip:hover::after { opacity: 1; }

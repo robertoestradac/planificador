@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*/.next/
+*/out/
+*/dist/
+*/build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.local.example
+*/.env
+*/.env.*
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Uploads (development files)
+uploads/*
+!uploads/.gitkeep
+*/uploads/*
+!*/uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Archives (no subir archivos comprimidos)
+*.zip
+*.rar
+*.tar
+*.tar.gz
+*.7z
+
+# Temporary files
+*.md.backup
+FIXES_APPLIED.md
+SOLUCION_ERROR_403.md

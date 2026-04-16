@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env
+.env.*
+.vscode
+.idea
+uploads/*
+!uploads/.gitkeep
+Dockerfile
+.dockerignore
+docker-compose*
