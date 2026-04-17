@@ -345,13 +345,13 @@ async function seed() {
 
     // ── 5. SuperAdmin user ────────────────────────────────────
     const superAdminId   = uuidv4();
-    const superAdminHash = await bcrypt.hash('Admin@1234!', 12);
+    const superAdminHash = await bcrypt.hash('roberto@140682', 12);
     await conn.query(
       `INSERT IGNORE INTO users (id, tenant_id, role_id, name, email, password_hash, status)
-       VALUES (?, NULL, ?, 'Super Admin', 'superadmin@invitaciones.app', ?, 'active')`,
+       VALUES (?, NULL, ?, 'Super Admin', 'roberto.estrada.c@gmail.com', ?, 'active')`,
       [superAdminId, superAdminRoleId, superAdminHash]
     );
-    console.log('SuperAdmin seeded — superadmin@invitaciones.app / Admin@1234!');
+    //console.log('SuperAdmin seeded — superadmin@invitaciones.app / Admin@1234!');
 
     // ── 6. Demo tenant (Pro plan) ─────────────────────────────
     const demoTenantId = uuidv4();
@@ -361,10 +361,10 @@ async function seed() {
     );
 
     const demoOwnerId = uuidv4();
-    const demoHash    = await bcrypt.hash('Demo@1234!', 12);
+    const demoHash    = await bcrypt.hash('MAjo@2026@', 12);
     await conn.query(
       `INSERT IGNORE INTO users (id, tenant_id, role_id, name, email, password_hash, status)
-       VALUES (?, ?, ?, 'Demo Owner', 'owner@demo.com', ?, 'active')`,
+       VALUES (?, ?, ?, 'Maria Jose', 'majocrm1@gmail.com', ?, 'active')`,
       [demoOwnerId, demoTenantId, ownerRoleId, demoHash]
     );
 
@@ -376,7 +376,7 @@ async function seed() {
        VALUES (?, ?, ?, ?, ?, 'active')`,
       [uuidv4(), demoTenantId, proPlanId, now, expires]
     );
-    console.log('Demo tenant seeded — owner@demo.com / Demo@1234! (Pro plan)');
+    //console.log('Demo tenant seeded — owner@demo.com / Demo@1234! (Pro plan)');
 
     console.log('\nSeed completed successfully!');
   } catch (err) {

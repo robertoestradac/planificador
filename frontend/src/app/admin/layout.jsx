@@ -30,7 +30,7 @@ export default function AdminLayout({ children }) {
 
   useEffect(() => {
     if (!_hasHydrated) return;
-    if (!isAuthenticated) { router.push('/login'); return; }
+    if (!isAuthenticated) { router.push('/adminsis'); return; }
     const adminRoles = ['SuperAdmin', 'Admin', 'Support'];
     if (user && !adminRoles.includes(user.role)) router.push('/dashboard');
   }, [_hasHydrated, isAuthenticated, user, router]);

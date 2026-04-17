@@ -36,19 +36,21 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   
   // Optimización de webpack
-  webpack: (config, { isServer }) => {
+  webpack: (config, { dev, isServer }) => {
     // Reducir el tamaño del bundle
     config.optimization = {
       ...config.optimization,
       moduleIds: 'deterministic',
     };
-    
+
+    // En producción, desactivar el cache persistente en disco de webpack
+    // para evitar que `.next/cache/webpack` crezca a varios GB entre builds.
+    // El cache sólo acelera rebuilds locales; no se usa en runtime ni se despliega.
+    if (!dev) {
+      config.cache = false;
+    }
+
     return config;
-  },
-  
-  // Experimental: reducir el tamaño del caché
-  experimental: {
-    optimizeCss: true,
   },
   
   async rewrites() {

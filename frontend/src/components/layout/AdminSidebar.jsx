@@ -36,7 +36,7 @@ function SidebarContent({ onClose }) {
     const { default: dataCache } = await import('@/lib/dataCache');
     dataCache.clear();
     await logout();
-    router.push('/login');
+    router.push('/adminsis');
   };
 
   const handleNavClick = () => {
