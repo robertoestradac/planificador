@@ -9,6 +9,7 @@ const errorHandler = (err, req, res, next) => {
       success: false,
       message: err.message,
       ...(err.errors && { errors: err.errors }),
+      ...(err.details && { details: err.details }),
     });
   }
 

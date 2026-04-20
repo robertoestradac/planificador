@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Loader2, Mail, Calendar, MapPin, Heart, Sparkles } from 'lucide-react';
 import api from '@/lib/api';
 import { useAppSettings } from '@/components/layout/AppBranding';
@@ -49,6 +49,8 @@ function AnimatedSection({ children, animation = 'fade-up', delay = 0, className
 
 export default function PublicInvitationPage() {
   const { slug } = useParams();
+  const searchParams = useSearchParams();
+  const preselectedGuestId = searchParams?.get('g') || '';
   const appSettings = useAppSettings();
   const [invitation,    setInvitation]    = useState(null);
   const [loading,       setLoading]       = useState(true);
@@ -92,6 +94,13 @@ export default function PublicInvitationPage() {
     
     return () => obs.disconnect();
   }, [sections, themeData.canvasMode]);
+
+  // Auto-fill & auto-open RSVP when arriving with ?g=<guestId>
+  useEffect(() => {
+    if (preselectedGuestId) {
+      setRsvpForm(f => ({ ...f, guest_id: preselectedGuestId }));
+    }
+  }, [preselectedGuestId]);
 
   useEffect(() => {
     api.get(`/invitations/public/${slug}`)

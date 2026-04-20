@@ -467,6 +467,23 @@ CREATE TABLE IF NOT EXISTS payments (
 
 -- Add max_invitations to plans if not exists
 ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_invitations INT NULL AFTER max_events;
+
+-- ============================================================
+-- GUESTS extra fields (party size, group, dietary, notes, check-in)
+-- ============================================================
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS party_size           INT          NOT NULL DEFAULT 1 AFTER email;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS group_name           VARCHAR(100) NULL AFTER party_size;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS dietary_restrictions VARCHAR(500) NULL AFTER group_name;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS notes                TEXT         NULL AFTER dietary_restrictions;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checked_in           TINYINT(1)   NOT NULL DEFAULT 0 AFTER notes;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS checked_in_at        DATETIME     NULL AFTER checked_in;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS invitation_sent_at   DATETIME     NULL AFTER checked_in_at;
+ALTER TABLE guests ADD INDEX IF NOT EXISTS idx_group_name (group_name);
+ALTER TABLE guests ADD INDEX IF NOT EXISTS idx_checked_in (checked_in);
+ALTER TABLE guests ADD INDEX IF NOT EXISTS idx_invitation_sent (invitation_sent_at);
+
+-- RSVP extra fields (party size confirmed)
+ALTER TABLE rsvps ADD COLUMN IF NOT EXISTS party_size_confirmed INT NULL AFTER message;
 `;
 
 async function migrate() {
