@@ -13,12 +13,10 @@ services:
       - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.le.acme.tlschallenge=true
-      - --log.level=DEBUG
-      - --api.insecure=true
+      - --log.level=INFO
     ports:
       - "80:80"
       - "443:443"
-      - "127.0.0.1:8080:8080"
     environment:
       - DOCKER_API_VERSION=1.43
     volumes:
