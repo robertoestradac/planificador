@@ -13,7 +13,7 @@ services:
       - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.le.acme.tlschallenge=true
-      # - --log.level=DEBUG
+      - --log.level=INFO
     ports:
       - "80:80"
       - "443:443"
@@ -98,17 +98,19 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=web
-      - traefik.http.routers.frontend.rule=Host(`planificador.app`) || Host(`www.planificador.app`)
+      # Router principal (apex)
+      - traefik.http.routers.frontend.rule=Host(`planificador.app`)
       - traefik.http.routers.frontend.entrypoints=websecure
-      - traefik.http.routers.frontend.tls=true
       - traefik.http.routers.frontend.tls.certresolver=le
-      - traefik.http.routers.frontend.tls.domains[0].main=planificador.app
-      - traefik.http.routers.frontend.tls.domains[0].sans=www.planificador.app
       - traefik.http.services.frontend.loadbalancer.server.port=3000
-      # Redirect www -> apex
-      - traefik.http.middlewares.wwwredirect.redirectregex.regex=^https://www\.planificador\.app/(.*)
+      # Router para www con redirect a apex
+      - traefik.http.routers.frontend-www.rule=Host(`www.planificador.app`)
+      - traefik.http.routers.frontend-www.entrypoints=websecure
+      - traefik.http.routers.frontend-www.tls.certresolver=le
+      - traefik.http.routers.frontend-www.middlewares=wwwredirect
+      - traefik.http.middlewares.wwwredirect.redirectregex.regex=^https?://www\.planificador\.app/(.*)
       - traefik.http.middlewares.wwwredirect.redirectregex.replacement=https://planificador.app/$${1}
-      - traefik.http.routers.frontend.middlewares=wwwredirect
+      - traefik.http.middlewares.wwwredirect.redirectregex.permanent=true
 
 volumes:
   mysql_data:
