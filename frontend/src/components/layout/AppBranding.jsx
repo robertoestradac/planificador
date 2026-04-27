@@ -5,8 +5,12 @@ import useSettingsStore from '@/store/settingsStore';
 
 /* Hook: auto-fetches settings and returns them */
 export function useAppSettings() {
-  const { settings, fetch } = useSettingsStore();
-  useEffect(() => { fetch(); }, []); // eslint-disable-line
+  const { settings, loaded, fetch } = useSettingsStore();
+  useEffect(() => {
+    if (!loaded) {
+      fetch();
+    }
+  }, [loaded, fetch]);
   return settings;
 }
 

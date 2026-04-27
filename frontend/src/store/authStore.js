@@ -18,11 +18,14 @@ const useAuthStore = create(
         if (tenant_id) payload.tenant_id = tenant_id;
         const { data } = await api.post('/auth/login', payload);
         const result = data.data;
-        if (result.require2fa) {
+        if (result.require2fa || result.requires_2fa) {
           set({ pending2fa: result.temp_token });
           return { require2fa: true };
         }
-        const { accessToken, refreshToken, user } = result;
+        // Soportar tanto camelCase como snake_case
+        const accessToken = result.accessToken || result.access_token;
+        const refreshToken = result.refreshToken || result.refresh_token;
+        const user = result.user;
         localStorage.setItem('access_token', accessToken);
         localStorage.setItem('refresh_token', refreshToken);
         document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
@@ -35,7 +38,10 @@ const useAuthStore = create(
         const tempToken = get().pending2fa;
         if (!tempToken) throw new Error('No pending 2FA session');
         const { data } = await api.post('/auth/2fa/verify-login', { temp_token: tempToken, code });
-        const { accessToken, refreshToken, user } = data.data;
+        // Soportar tanto camelCase como snake_case
+        const accessToken = data.data.accessToken || data.data.access_token;
+        const refreshToken = data.data.refreshToken || data.data.refresh_token;
+        const user = data.data.user;
         localStorage.setItem('access_token', accessToken);
         localStorage.setItem('refresh_token', refreshToken);
         document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;

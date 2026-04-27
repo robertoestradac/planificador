@@ -240,7 +240,7 @@ export default function DashboardSettingsPage() {
                 <p className="font-semibold text-gray-900">{user?.name}</p>
                 <p className="text-sm text-gray-500">{user?.email}</p>
                 <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">
-                  {user?.role}
+                  {user?.role?.name}
                 </span>
               </div>
             </div>

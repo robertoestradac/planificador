@@ -49,7 +49,7 @@ export default function DashboardTopbar({ onMenuClick }) {
           </div>
           <div className="hidden sm:block text-left">
             <p className="text-sm font-medium text-gray-900 leading-tight">{user?.name}</p>
-            <p className="text-xs text-gray-500 leading-tight">{user?.role}</p>
+            <p className="text-xs text-gray-500 leading-tight">{user?.role?.name}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>

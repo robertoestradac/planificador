@@ -103,7 +103,7 @@ function SidebarContent({ onClose }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{user?.name}</p>
-            <p className="text-xs text-gray-400 truncate">{user?.role}</p>
+            <p className="text-xs text-gray-400 truncate">{user?.role?.name}</p>
           </div>
         </div>
         <button

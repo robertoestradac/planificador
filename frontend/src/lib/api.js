@@ -1,11 +1,11 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: false,
+  withCredentials: true, // Importante para Laravel Sanctum (cookies CSRF)
 });
 
 // Attach access token to every request
@@ -33,7 +33,9 @@ api.interceptors.response.use(
         const { data } = await axios.post(`${API_URL}/api/v1/auth/refresh`, {
           refresh_token: refreshToken,
         });
-        const { accessToken, refreshToken: newRefreshToken } = data.data;
+        // Soportar tanto camelCase como snake_case
+        const accessToken = data.data.accessToken || data.data.access_token;
+        const newRefreshToken = data.data.refreshToken || data.data.refresh_token;
         localStorage.setItem('access_token', accessToken);
         localStorage.setItem('refresh_token', newRefreshToken);
         original.headers.Authorization = `Bearer ${accessToken}`;

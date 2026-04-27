@@ -261,9 +261,9 @@ export default function LoginForm({ variant = 'tenant' }) {
               <div className="mt-6 p-4 bg-muted rounded-lg text-xs text-muted-foreground space-y-1">
                 <p className="font-semibold">Credenciales de prueba:</p>
                 {isAdminMode ? (
-                  <p>SuperAdmin: superadmin@invitaciones.app / Admin@1234!</p>
+                  <p>SuperAdmin: roberto.estrada.c@gmail.com / roberto@140682</p>
                 ) : (
-                  <p>Cliente demo: owner@demo.com / Demo@1234!</p>
+                  <p>Cliente demo: majocrm1@gmail.com / MAjo@2026@</p>
                 )}
               </div>
             )}
