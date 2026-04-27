@@ -100,7 +100,10 @@ services:
       - traefik.docker.network=web
       - traefik.http.routers.frontend.rule=Host(`planificador.app`) || Host(`www.planificador.app`)
       - traefik.http.routers.frontend.entrypoints=websecure
+      - traefik.http.routers.frontend.tls=true
       - traefik.http.routers.frontend.tls.certresolver=le
+      - traefik.http.routers.frontend.tls.domains[0].main=planificador.app
+      - traefik.http.routers.frontend.tls.domains[0].sans=www.planificador.app
       - traefik.http.services.frontend.loadbalancer.server.port=3000
       # Redirect www -> apex
       - traefik.http.middlewares.wwwredirect.redirectregex.regex=^https://www\.planificador\.app/(.*)
