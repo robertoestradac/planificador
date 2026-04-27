@@ -486,6 +486,33 @@ ALTER TABLE guests ADD INDEX IF NOT EXISTS idx_invitation_sent (invitation_sent_
 ALTER TABLE rsvps ADD COLUMN IF NOT EXISTS party_size_confirmed INT NULL AFTER message;
 `;
 
+// Errores ignorables al reintentar migraciones (ya aplicadas):
+// 1060 Duplicate column | 1061 Duplicate key | 1091 Can't DROP ... doesn't exist
+// 1826 Duplicate foreign key | 1022 Duplicate key on write | 1050 Table already exists
+const IGNORABLE_ERRNOS = new Set([1050, 1060, 1061, 1091, 1022, 1826]);
+
+// MySQL 8 no soporta "ADD COLUMN IF NOT EXISTS" / "ADD INDEX IF NOT EXISTS".
+// Las quitamos y dejamos que 1060/1061 se ignoren con el catch de abajo.
+function normalizeStatement(sql) {
+  return sql
+    .replace(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS/gi, 'ADD COLUMN')
+    .replace(/ADD\s+INDEX\s+IF\s+NOT\s+EXISTS/gi, 'ADD INDEX')
+    .replace(/ADD\s+KEY\s+IF\s+NOT\s+EXISTS/gi, 'ADD KEY')
+    .replace(/DROP\s+COLUMN\s+IF\s+EXISTS/gi, 'DROP COLUMN')
+    .replace(/DROP\s+INDEX\s+IF\s+EXISTS/gi, 'DROP INDEX');
+}
+
+// Separar por `;` respetando comentarios de línea
+function splitStatements(sql) {
+  return sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n')
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 async function migrate() {
   const conn = await mysql.createConnection({
     host: config.db.host,
@@ -501,8 +528,23 @@ async function migrate() {
     await conn.query(`USE \`${config.db.name}\``);
 
     console.log('Running migrations...');
-    await conn.query(schema);
-    console.log('Migrations completed successfully.');
+    const statements = splitStatements(schema).map(normalizeStatement);
+    let applied = 0;
+    let skipped = 0;
+    for (const stmt of statements) {
+      try {
+        await conn.query(stmt);
+        applied++;
+      } catch (err) {
+        if (IGNORABLE_ERRNOS.has(err.errno)) {
+          skipped++;
+          continue;
+        }
+        console.error('\n✖ Failed statement:\n', stmt);
+        throw err;
+      }
+    }
+    console.log(`Migrations completed: ${applied} applied, ${skipped} skipped (already existed).`);
   } catch (err) {
     console.error('Migration failed:', err.message);
     process.exit(1);
