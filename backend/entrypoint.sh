@@ -25,14 +25,25 @@ done
 
 echo "✅ Database is ready."
 
-# Run migrations (idempotent — uses CREATE TABLE IF NOT EXISTS)
-echo "🔄 Running database migrations..."
-node src/database/migrate.js
+# Check migration mode (default: normal)
+MIGRATION_MODE="${MIGRATION_MODE:-normal}"
 
-# Run seed if SEED_ON_BOOT is set (first deploy only)
-if [ "$SEED_ON_BOOT" = "true" ]; then
-  echo "🌱 Seeding database..."
-  node src/database/seed.js
+if [ "$MIGRATION_MODE" = "fresh" ]; then
+  echo "⚠️  MIGRATION MODE: FRESH (will drop all data)"
+  echo "🔄 Running migrate:fresh..."
+  node src/database/migrate_fresh.js
+elif [ "$MIGRATION_MODE" = "normal" ]; then
+  echo "🔄 Running database migrations..."
+  node src/database/migrate.js
+  
+  # Run seed if SEED_ON_BOOT is set (first deploy only)
+  if [ "$SEED_ON_BOOT" = "true" ]; then
+    echo "🌱 Seeding database..."
+    node src/database/seed.js
+  fi
+else
+  echo "❌ Invalid MIGRATION_MODE: $MIGRATION_MODE (use 'normal' or 'fresh')"
+  exit 1
 fi
 
 echo "🚀 Starting server..."

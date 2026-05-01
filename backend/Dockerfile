@@ -17,7 +17,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src ./src
 COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh && mkdir -p uploads
+RUN chmod +x ./entrypoint.sh
+
+# Create uploads directory with proper permissions
+# This will be overridden by the volume mount
+RUN mkdir -p /app/uploads && chmod 755 /app/uploads
 
 EXPOSE 4000
 

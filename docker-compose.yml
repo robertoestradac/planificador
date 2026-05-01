@@ -47,7 +47,7 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.new
     container_name: backend
     restart: unless-stopped
     depends_on:
@@ -69,6 +69,7 @@ services:
       APP_DOMAIN: planificador.app
       APP_PROTOCOL: https
       SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
+      MIGRATION_MODE: ${MIGRATION_MODE:-normal}
     volumes:
       - backend_uploads:/app/uploads
     networks:

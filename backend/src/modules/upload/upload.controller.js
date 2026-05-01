@@ -29,7 +29,16 @@ const uploadImage = async (req, res, next) => {
     const protocol = config.app?.protocol || 'http';
     const domain = config.app?.domain || 'localhost';
     const port = config.port || 4000;
-    const baseUrl = domain === 'localhost' ? `${protocol}://${domain}:${port}` : `${protocol}://${domain}`;
+    
+    // In production, use api subdomain; in development, use localhost with port
+    let baseUrl;
+    if (domain === 'localhost') {
+      baseUrl = `${protocol}://${domain}:${port}`;
+    } else {
+      // In production, the API is served from api.domain
+      baseUrl = `${protocol}://api.${domain}`;
+    }
+    
     const fileUrl = `${baseUrl}/uploads/${filename}`;
 
     res.json({
