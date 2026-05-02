@@ -404,17 +404,23 @@ CREATE TABLE IF NOT EXISTS plan_seats (
 -- PLAN SEAT ASSIGNMENTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS plan_seat_assignments (
-  id         VARCHAR(36) NOT NULL PRIMARY KEY,
-  seat_id    VARCHAR(36) NOT NULL UNIQUE,
-  guest_id   VARCHAR(36) NOT NULL,
-  plan_id    VARCHAR(36) NOT NULL,
-  created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id              VARCHAR(36) NOT NULL PRIMARY KEY,
+  seat_id         VARCHAR(36) NOT NULL UNIQUE,
+  guest_id        VARCHAR(36) NOT NULL,
+  plan_id         VARCHAR(36) NOT NULL,
+  is_companion    TINYINT(1)  NOT NULL DEFAULT 0,
+  companion_index INT         NULL,
+  created_at      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_plan_id (plan_id),
   INDEX idx_guest_id (guest_id),
   FOREIGN KEY fk_psa_seat  (seat_id)  REFERENCES plan_seats(id) ON DELETE CASCADE,
   FOREIGN KEY fk_psa_guest (guest_id) REFERENCES guests(id) ON DELETE CASCADE,
   FOREIGN KEY fk_psa_plan  (plan_id)  REFERENCES event_plans(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Add companion fields if table already exists
+ALTER TABLE plan_seat_assignments ADD COLUMN IF NOT EXISTS is_companion    TINYINT(1) NOT NULL DEFAULT 0 AFTER plan_id;
+ALTER TABLE plan_seat_assignments ADD COLUMN IF NOT EXISTS companion_index INT        NULL AFTER is_companion;
 
 -- ============================================================
 -- APP SETTINGS (singleton row, id = 1)
@@ -484,6 +490,64 @@ ALTER TABLE guests ADD INDEX IF NOT EXISTS idx_invitation_sent (invitation_sent_
 
 -- RSVP extra fields (party size confirmed)
 ALTER TABLE rsvps ADD COLUMN IF NOT EXISTS party_size_confirmed INT NULL AFTER message;
+
+-- ============================================================
+-- MARKETING SETTINGS (singleton row, id = 1)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS marketing_settings (
+  id                 INT           NOT NULL PRIMARY KEY DEFAULT 1,
+  smtp_provider      VARCHAR(50)   NOT NULL DEFAULT 'brevo',
+  smtp_api_key       VARCHAR(255)  NULL,
+  smtp_sender_name   VARCHAR(100)  NULL,
+  smtp_sender_email  VARCHAR(255)  NULL,
+  smtp_enabled       TINYINT(1)    NOT NULL DEFAULT 0,
+  smtp_list_id       VARCHAR(100)  NULL COMMENT 'Brevo/Mailchimp list ID',
+  created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO marketing_settings (id, smtp_provider, smtp_enabled)
+VALUES (1, 'brevo', 0);
+
+-- ============================================================
+-- EMAIL CAMPAIGNS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS email_campaigns (
+  id            VARCHAR(36)  NOT NULL PRIMARY KEY,
+  tenant_id     VARCHAR(36)  NULL,
+  subject       VARCHAR(255) NOT NULL,
+  html_content  LONGTEXT     NOT NULL,
+  status        ENUM('draft','sending','sent','failed') NOT NULL DEFAULT 'draft',
+  recipients    JSON         NULL COMMENT 'Array of recipient groups',
+  sent_count    INT          NOT NULL DEFAULT 0,
+  failed_count  INT          NOT NULL DEFAULT 0,
+  created_by    VARCHAR(36)  NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at       DATETIME     NULL,
+  INDEX idx_tenant_id (tenant_id),
+  INDEX idx_status (status),
+  INDEX idx_created_at (created_at),
+  FOREIGN KEY fk_campaign_tenant (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL,
+  FOREIGN KEY fk_campaign_user (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- SMTP TRANSACTIONAL CONFIG (for system emails)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS smtp_config (
+  id            INT          NOT NULL PRIMARY KEY DEFAULT 1,
+  host          VARCHAR(255) NULL,
+  port          INT          NULL DEFAULT 587,
+  secure        TINYINT(1)   NOT NULL DEFAULT 0,
+  user          VARCHAR(255) NULL,
+  password      VARCHAR(255) NULL,
+  from_email    VARCHAR(255) NULL,
+  from_name     VARCHAR(100) NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO smtp_config (id) VALUES (1);
 `;
 
 // Errores ignorables al reintentar migraciones (ya aplicadas):

@@ -204,18 +204,22 @@ const PlannerService = {
     await PlannerModel.deleteSeatingTable(tableId, planId);
   },
 
-  async assignSeat(seatId, tableId, planId, tenantId, guestId) {
+  async assignSeat(seatId, tableId, planId, tenantId, guestId, isCompanion = false, companionIndex = null) {
     await this.getById(planId, tenantId);
-    // Check guest not already assigned in this plan
-    const tables = await PlannerModel.getSeatingTables(planId);
-    for (const table of tables) {
-      for (const seat of table.seats) {
-        if (seat.assignment && seat.assignment.guest_id === guestId && seat.id !== seatId) {
-          throw new AppError('Guest is already assigned to a seat in this plan', 409);
+    
+    // Si no es un acompañante, verificar que el invitado no esté ya asignado
+    if (!isCompanion) {
+      const tables = await PlannerModel.getSeatingTables(planId);
+      for (const table of tables) {
+        for (const seat of table.seats) {
+          if (seat.assignment && seat.assignment.guest_id === guestId && seat.id !== seatId && !seat.assignment.is_companion) {
+            throw new AppError('Guest is already assigned to a seat in this plan', 409);
+          }
         }
       }
     }
-    return PlannerModel.assignSeat(seatId, tableId, planId, guestId);
+    
+    return PlannerModel.assignSeat(seatId, tableId, planId, guestId, isCompanion, companionIndex);
   },
 
   async unassignSeat(seatId, tableId, planId, tenantId) {

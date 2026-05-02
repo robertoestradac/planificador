@@ -36,6 +36,7 @@ const ALL_PERMISSIONS = [
   { key_name: 'builder_block_dresscode', description: 'Builder: bloque Código de vestimenta' },
   { key_name: 'builder_block_photos',  description: 'Builder: bloque Subir fotos (invitados)' },
   { key_name: 'builder_block_text',    description: 'Builder: bloque Texto/Cita' },
+  { key_name: 'builder_block_gif',     description: 'Builder: bloque GIF animado' },
   { key_name: 'builder_block_misc',    description: 'Builder: bloques Utilidad (divider, hospedaje, menú)' },
 
   // ── Invitados ────────────────────────────────────────────
@@ -91,7 +92,7 @@ const PERMISSION_MODULES = [
     keys: ['use_builder','builder_block_hero','builder_block_gallery','builder_block_video',
            'builder_block_music','builder_block_rsvp','builder_block_map','builder_block_countdown',
            'builder_block_schedule','builder_block_couple','builder_block_gifts',
-           'builder_block_dresscode','builder_block_photos','builder_block_text','builder_block_misc'],
+           'builder_block_dresscode','builder_block_photos','builder_block_text','builder_block_gif','builder_block_misc'],
   },
   {
     module: 'Invitados',
@@ -223,7 +224,7 @@ async function seed() {
       'view_invitations','create_invitation','edit_invitation','publish_invitation',
       'use_builder',
       'builder_block_hero','builder_block_gallery','builder_block_rsvp','builder_block_map',
-      'builder_block_countdown','builder_block_schedule','builder_block_text',
+      'builder_block_countdown','builder_block_schedule','builder_block_text','builder_block_gif',
       'view_guests','manage_guests',
       'view_photos',
       'view_analytics',
@@ -253,7 +254,7 @@ async function seed() {
           'builder_block_hero','builder_block_gallery','builder_block_video','builder_block_music',
           'builder_block_rsvp','builder_block_map','builder_block_countdown','builder_block_schedule',
           'builder_block_couple','builder_block_gifts','builder_block_dresscode',
-          'builder_block_photos','builder_block_text','builder_block_misc',
+          'builder_block_photos','builder_block_text','builder_block_gif','builder_block_misc',
           'view_guests','manage_guests',
           'view_photos','delete_photos',
           'view_analytics',
@@ -274,7 +275,7 @@ async function seed() {
           // Builder: core blocks only
           'use_builder',
           'builder_block_hero','builder_block_text','builder_block_rsvp',
-          'builder_block_map','builder_block_countdown',
+          'builder_block_map','builder_block_countdown','builder_block_gif',
           // Guests
           'view_guests','manage_guests',
           // Photos: view only
@@ -297,7 +298,7 @@ async function seed() {
           'builder_block_hero','builder_block_gallery','builder_block_video','builder_block_music',
           'builder_block_rsvp','builder_block_map','builder_block_countdown','builder_block_schedule',
           'builder_block_couple','builder_block_gifts','builder_block_dresscode',
-          'builder_block_photos','builder_block_text','builder_block_misc',
+          'builder_block_photos','builder_block_text','builder_block_gif','builder_block_misc',
           // Guests
           'view_guests','manage_guests',
           // Photos
@@ -323,7 +324,7 @@ async function seed() {
           'builder_block_hero','builder_block_gallery','builder_block_video','builder_block_music',
           'builder_block_rsvp','builder_block_map','builder_block_countdown','builder_block_schedule',
           'builder_block_couple','builder_block_gifts','builder_block_dresscode',
-          'builder_block_photos','builder_block_text','builder_block_misc',
+          'builder_block_photos','builder_block_text','builder_block_gif','builder_block_misc',
           'view_guests','manage_guests',
           'view_photos','delete_photos',
           'view_analytics',

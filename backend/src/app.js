@@ -28,6 +28,7 @@ const plannerRoutes      = require('./modules/planner/planner.routes');
 const dashboardRoutes    = require('./modules/planner/dashboard.routes');
 const settingsRoutes     = require('./modules/settings/settings.routes');
 const paymentsRoutes     = require('./modules/payments/payments.routes');
+const marketingRoutes    = require('./modules/marketing/marketing.routes');
 const path = require('path');
 
 const app = express();
@@ -82,11 +83,17 @@ if (config.env !== 'test') {
 // ── Global rate limit ─────────────────────────────────────────
 app.use(rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: config.env === 'development' ? 2000 : config.rateLimit.max,
+  max: config.env === 'development' ? 5000 : config.rateLimit.max,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => config.env === 'development' && req.ip === '::1',
-  message: { success: false, message: 'Too many requests, please try again later.' },
+  skip: (req) => {
+    // Skip rate limiting in development for localhost
+    if (config.env === 'development') {
+      return req.ip === '::1' || req.ip === '127.0.0.1';
+    }
+    return false;
+  },
+  message: { success: false, message: 'Too many requests. Please try again in a moment.' },
 }));
 
 // ── Health check ──────────────────────────────────────────────
@@ -131,6 +138,7 @@ app.use(`${API}/planner`,       plannerRoutes);
 app.use(`${API}/dashboard`,     dashboardRoutes);
 app.use(`${API}/settings`,      settingsRoutes);
 app.use(`${API}/payments`,      paymentsRoutes);
+app.use(`${API}/admin/marketing`, marketingRoutes);
 
 // ── 404 handler ───────────────────────────────────────────────
 app.use((req, res) => {

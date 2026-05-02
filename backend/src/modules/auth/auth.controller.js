@@ -90,6 +90,26 @@ const AuthController = {
       return success(res, result);
     } catch (err) { next(err); }
   },
+
+  // ============================================================
+  // EMAIL VERIFICATION
+  // ============================================================
+
+  async verifyEmail(req, res, next) {
+    try {
+      const { token } = req.body;
+      const result = await AuthService.verifyEmail(token);
+      return success(res, result, result.message);
+    } catch (err) { next(err); }
+  },
+
+  async resendVerification(req, res, next) {
+    try {
+      const { email } = req.body;
+      const result = await AuthService.resendVerificationEmail(email);
+      return success(res, result, result.message);
+    } catch (err) { next(err); }
+  },
 };
 
 module.exports = AuthController;

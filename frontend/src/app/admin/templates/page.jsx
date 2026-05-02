@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Plus, FileImage, Pencil, Trash2, Eye, EyeOff, Paintbrush2,
-  X, Smartphone, Monitor, Layers, ZoomIn, Camera, Loader2,
+  X, Smartphone, Monitor, Layers, ZoomIn, Camera, Loader2, Download, Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -467,6 +467,63 @@ function TemplateCard({ t, onEdit, onToggle, onDelete, onPreview, onRefresh }) {
     }
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // EXPORT TEMPLATE - Download as .plan file
+  // ══════════════════════════════════════════════════════════════
+  const handleExport = async (e) => {
+    e.stopPropagation();
+    try {
+      // Fetch full template to get base_json
+      const { data: fullData } = await api.get(`/templates/${t.id}`);
+      const { sections, theme } = parseTemplateJson(fullData.data?.base_json);
+
+      if (!sections.length) {
+        toast({ variant: 'destructive', title: 'Sin contenido para exportar' });
+        return;
+      }
+
+      // Create .plan file
+      const templateData = {
+        version: '1.0',
+        appName: 'Planificador de Invitaciones',
+        exportDate: new Date().toISOString(),
+        invitation: {
+          title: t.name,
+          type: t.category?.toLowerCase() || 'plantilla',
+        },
+        sections: sections,
+        theme: theme,
+      };
+
+      const jsonString = JSON.stringify(templateData, null, 2);
+      // Use 'application/octet-stream' to force download with exact extension
+      const blob = new Blob([jsonString], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanName = t.name.replace(/[^a-z0-9áéíóúñ\s\-_]/gi, '').trim() || 'plantilla';
+      const fileName = `${cleanName}.plan`;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({ 
+        title: '✓ Plantilla exportada', 
+        description: `Archivo ${fileName} descargado exitosamente` 
+      });
+    } catch (error) {
+      console.error('Error exporting template:', error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error al exportar', 
+        description: 'No se pudo exportar la plantilla' 
+      });
+    }
+  };
+
   return (
     <Card className={`group overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 ${!t.is_active ? 'opacity-60' : ''}`}>
 
@@ -566,15 +623,26 @@ function TemplateCard({ t, onEdit, onToggle, onDelete, onPreview, onRefresh }) {
             </Button>
 
             {hasContent && (
-              <Button
-                size="sm" variant="outline"
-                className={`px-2.5 ${capturing ? 'opacity-60' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
-                onClick={handleCapture}
-                disabled={capturing}
-                title="Generar imagen de vista previa"
-              >
-                {capturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
-              </Button>
+              <>
+                <Button
+                  size="sm" variant="outline"
+                  className={`px-2.5 ${capturing ? 'opacity-60' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
+                  onClick={handleCapture}
+                  disabled={capturing}
+                  title="Generar imagen de vista previa"
+                >
+                  {capturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                </Button>
+
+                <Button
+                  size="sm" variant="outline"
+                  className="px-2.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                  onClick={handleExport}
+                  title="Exportar plantilla (.plan)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </Button>
+              </>
             )}
 
             <Button size="sm" variant="outline" onClick={() => onEdit(t)} className="px-2.5" title="Editar datos">
@@ -669,6 +737,94 @@ export default function TemplatesPage() {
     }
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // GLOBAL IMPORT - Create new template from .plan file
+  // ══════════════════════════════════════════════════════════════
+  const handleGlobalImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.plan';
+    
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Validate file extension
+      if (!file.name.endsWith('.plan')) {
+        toast({ 
+          variant: 'destructive', 
+          title: 'Archivo inválido', 
+          description: 'Solo se permiten archivos .plan' 
+        });
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const templateData = JSON.parse(text);
+
+        // Validate structure
+        if (!templateData.sections || !Array.isArray(templateData.sections)) {
+          throw new Error('Formato de plantilla inválido - falta el array de secciones');
+        }
+
+        if (!templateData.version) {
+          throw new Error('Formato de plantilla inválido - falta la versión');
+        }
+
+        // Extract name from file or template data
+        const defaultName = templateData.invitation?.title || file.name.replace('.plan', '');
+        const templateName = prompt(
+          `Nombre para la nueva plantilla:\n\n` +
+          `Se importarán ${templateData.sections.length} secciones.`,
+          defaultName
+        );
+        
+        if (!templateName || !templateName.trim()) {
+          toast({ title: 'Importación cancelada' });
+          return;
+        }
+
+        // Prepare builder_json
+        const builderJson = {
+          sections: templateData.sections,
+          theme: templateData.theme || {},
+        };
+
+        // Create new template with imported content
+        const { data } = await api.post('/templates', {
+          name: templateName.trim(),
+          category: templateData.invitation?.type || '',
+          is_active: 1,
+        });
+
+        const newTemplateId = data.data.id;
+
+        // Update with imported content
+        await api.put(`/templates/${newTemplateId}`, {
+          base_json: JSON.stringify(builderJson),
+        });
+
+        toast({ 
+          title: '✓ Plantilla importada', 
+          description: `"${templateName}" creada con ${templateData.sections.length} secciones` 
+        });
+
+        // Refresh templates list
+        fetchTemplates();
+      } catch (error) {
+        console.error('Error importing template:', error);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Error al importar plantilla', 
+          description: error.message || 'El archivo no es una plantilla válida' 
+        });
+      }
+    };
+
+    input.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -676,9 +832,18 @@ export default function TemplatesPage() {
           <h1 className="text-3xl font-bold text-gray-900">Plantillas</h1>
           <p className="text-gray-500 mt-1">Gestiona las plantillas base disponibles para los clientes</p>
         </div>
-        <Button onClick={() => { setShowForm(!showForm); setEditId(null); setForm(emptyForm); }}>
-          <Plus className="w-4 h-4 mr-2" /> Nueva Plantilla
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline"
+            onClick={handleGlobalImport}
+            className="gap-2"
+          >
+            <Upload className="w-4 h-4" /> Importar Plantilla
+          </Button>
+          <Button onClick={() => { setShowForm(!showForm); setEditId(null); setForm(emptyForm); }}>
+            <Plus className="w-4 h-4 mr-2" /> Nueva Plantilla
+          </Button>
+        </div>
       </div>
 
       {showForm && (

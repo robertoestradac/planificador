@@ -9,7 +9,7 @@ const { createPermissionSchema, updatePermissionSchema } = require('./permission
 const PERMISSION_MODULES = [
   { module: 'Eventos',       keys: ['view_events','create_event','edit_event','delete_event'] },
   { module: 'Invitaciones',  keys: ['view_invitations','create_invitation','edit_invitation','delete_invitation','publish_invitation'] },
-  { module: 'Builder',       keys: ['use_builder','builder_block_hero','builder_block_gallery','builder_block_video','builder_block_music','builder_block_rsvp','builder_block_map','builder_block_countdown','builder_block_schedule','builder_block_couple','builder_block_gifts','builder_block_dresscode','builder_block_photos','builder_block_text','builder_block_misc'] },
+  { module: 'Builder',       keys: ['use_builder','builder_block_hero','builder_block_gallery','builder_block_video','builder_block_music','builder_block_rsvp','builder_block_map','builder_block_countdown','builder_block_schedule','builder_block_couple','builder_block_gifts','builder_block_dresscode','builder_block_photos','builder_block_text','builder_block_gif','builder_block_misc'] },
   { module: 'Invitados',     keys: ['view_guests','manage_guests'] },
   { module: 'Fotos',         keys: ['view_photos','delete_photos'] },
   { module: 'Analiticas',    keys: ['view_analytics'] },

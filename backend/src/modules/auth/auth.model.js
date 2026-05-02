@@ -8,7 +8,7 @@ const AuthModel = {
   async findUserByEmail(email, tenantId = null) {
     let query = `
       SELECT u.id, u.tenant_id, u.role_id, u.name, u.email, u.password_hash,
-             u.totp_secret, u.totp_enabled, u.status,
+             u.email_verified, u.totp_secret, u.totp_enabled, u.status,
              r.name AS role_name, r.is_global
       FROM users u
       JOIN roles r ON r.id = u.role_id
@@ -90,6 +90,46 @@ const AuthModel = {
 
   async disableTotp(userId) {
     await pool.query('UPDATE users SET totp_enabled = 0, totp_secret = NULL WHERE id = ?', [userId]);
+  },
+
+  // ============================================================
+  // EMAIL VERIFICATION
+  // ============================================================
+
+  async setVerificationToken(userId, token, expiresAt) {
+    await pool.query(
+      'UPDATE users SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?',
+      [token, expiresAt, userId]
+    );
+  },
+
+  async findUserByVerificationToken(token) {
+    const [rows] = await pool.query(
+      `SELECT u.id, u.tenant_id, u.role_id, u.name, u.email, u.email_verified,
+              u.email_verification_expires, u.status,
+              r.name AS role_name, r.is_global
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       WHERE u.email_verification_token = ? 
+       AND u.deleted_at IS NULL`,
+      [token]
+    );
+    return rows[0] || null;
+  },
+
+  async verifyEmail(userId) {
+    await pool.query(
+      'UPDATE users SET email_verified = 1, email_verification_token = NULL, email_verification_expires = NULL WHERE id = ?',
+      [userId]
+    );
+  },
+
+  async isEmailVerified(userId) {
+    const [rows] = await pool.query(
+      'SELECT email_verified FROM users WHERE id = ?',
+      [userId]
+    );
+    return rows[0]?.email_verified === 1;
   },
 };
 

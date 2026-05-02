@@ -17,6 +17,7 @@ import HospedajeSection   from './HospedajeSection';
 import MenuEventSection      from './MenuEventSection';
 import PhotoUploadSection    from './PhotoUploadSection';
 import MaskSection           from './MaskSection';
+import GifSection            from './GifSection';
 
 export const SECTION_COMPONENTS = {
   hero:         HeroSection,
@@ -38,6 +39,7 @@ export const SECTION_COMPONENTS = {
   menu_event:     MenuEventSection,
   photo_upload:   PhotoUploadSection,
   mask:            MaskSection,
+  gif:             GifSection,
 };
 
 export const getSectionComponent = (type) => SECTION_COMPONENTS[type] || null;

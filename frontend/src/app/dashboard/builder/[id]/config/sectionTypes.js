@@ -643,6 +643,39 @@ export const SECTION_TYPES = {
       { name: 'paddingY', label: 'Espaciado vertical', type: 'number-unit', defaultUnit: 'px', units: ['px'] },
     ],
   },
+
+  gif: {
+    id: 'gif',
+    label: 'GIF Animado',
+    icon: 'Sparkles',
+    description: 'GIF animado decorativo o de animación',
+    defaultProps: {
+      gifUrl: '',
+      alt: 'GIF animado',
+      width: '100%',
+      height: 'auto',
+      maxWidth: '400px',
+      objectFit: 'contain',
+      borderRadius: '8px',
+      alignment: 'center',
+      paddingY: '20px',
+      shadow: false,
+      opacity: 100,
+    },
+    fields: [
+      { name: 'gifUrl', label: 'URL del GIF', type: 'text', required: true, placeholder: 'https://ejemplo.com/animacion.gif' },
+      { name: 'alt', label: 'Texto alternativo', type: 'text' },
+      { name: 'alignment', label: 'Alineación', type: 'select', options: ['left', 'center', 'right'] },
+      { name: 'width', label: 'Ancho', type: 'number-unit', defaultUnit: '%', units: ['%', 'px'] },
+      { name: 'maxWidth', label: 'Ancho máximo', type: 'number-unit', defaultUnit: 'px', units: ['px', '%'] },
+      { name: 'height', label: 'Alto', type: 'number-unit', defaultUnit: 'px', units: ['px', 'auto'] },
+      { name: 'objectFit', label: 'Ajuste', type: 'select', options: ['contain', 'cover', 'fill', 'none'] },
+      { name: 'borderRadius', label: 'Borde redondeado', type: 'number-unit', defaultUnit: 'px', units: ['px', '%'] },
+      { name: 'opacity', label: 'Opacidad (%)', type: 'range', min: 0, max: 100 },
+      { name: 'shadow', label: 'Sombra', type: 'checkbox' },
+      { name: 'paddingY', label: 'Espaciado vertical', type: 'number-unit', defaultUnit: 'px', units: ['px'] },
+    ],
+  },
 };
 
 export const getSectionConfig  = (type) => {

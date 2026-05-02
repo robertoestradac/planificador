@@ -92,6 +92,7 @@ const BLOCK_CATEGORY_MAP = {
   divider:      'utilidad',
   photo_upload: 'multimedia',
   mask:         'multimedia',
+  gif:          'multimedia',
 };
 
 const BLOCK_DESCRIPTIONS = {
@@ -114,6 +115,7 @@ const BLOCK_DESCRIPTIONS = {
   menu_event:   'Menú de comida y bebidas',
   photo_upload:  'Fotos enviadas por los invitados',
   mask:           'Texto o imagen con forma de máscara',
+  gif:            'GIF animado decorativo',
 };
 
 function DraggableBlockCard({ type, label, icon, onClick }) {

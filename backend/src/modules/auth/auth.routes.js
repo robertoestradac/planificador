@@ -29,4 +29,8 @@ router.post('/2fa/setup',        authenticate, AuthController.setup2FA);
 router.post('/2fa/enable',       authenticate, AuthController.enable2FA);
 router.post('/2fa/disable',      authenticate, AuthController.disable2FA);
 
+// Email verification routes
+router.post('/verify-email',     AuthController.verifyEmail);
+router.post('/resend-verification', AuthController.resendVerification);
+
 module.exports = router;

@@ -1,16 +1,17 @@
 const SubscriptionsModel = require('./subscriptions.model');
 const PlansModel = require('../plans/plans.model');
 const AppError = require('../../utils/AppError');
+const { getPlanExpirationDate } = require('../../utils/planHelpers');
 
 const SubscriptionsService = {
-  async create({ tenant_id, plan_id, duration_days = 30, status = 'active' }) {
+  async create({ tenant_id, plan_id, status = 'active' }) {
     const plan = await PlansModel.findById(plan_id);
     if (!plan) throw new AppError('Plan not found', 404);
     if (!plan.is_active) throw new AppError('Plan is not active', 400);
 
     const starts_at = new Date();
-    const expires_at = new Date();
-    expires_at.setDate(expires_at.getDate() + duration_days);
+    // ✅ Calculate expiration based on plan's duration_months
+    const expires_at = getPlanExpirationDate(plan, starts_at);
 
     return SubscriptionsModel.create({ tenant_id, plan_id, starts_at, expires_at, status });
   },
@@ -54,9 +55,9 @@ const SubscriptionsService = {
     await SubscriptionsModel.cancelByTenant(tenantId);
   },
 
-  async renew({ tenant_id, plan_id, duration_days = 30 }) {
+  async renew({ tenant_id, plan_id }) {
     await SubscriptionsModel.cancelByTenant(tenant_id);
-    return this.create({ tenant_id, plan_id, duration_days });
+    return this.create({ tenant_id, plan_id });
   },
 
   async getLimitsUsage(tenantId) {

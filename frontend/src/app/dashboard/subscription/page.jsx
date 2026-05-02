@@ -123,7 +123,9 @@ export default function SubscriptionPage() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-gray-900">${subscription.price_usd}</p>
-                <p className="text-sm text-gray-500">Q{subscription.price_gtq} GTQ / mes</p>
+                <p className="text-sm text-gray-500">
+                  Q{subscription.price_gtq} GTQ / {(subscription.duration_months ?? 1) === 1 ? 'mes' : `${subscription.duration_months} meses`}
+                </p>
               </div>
             </div>
 

@@ -83,7 +83,11 @@ export default function AdminSettingsPage() {
     if (activeTab !== 'smtp' || loadingSmtp || smtpConnected || smtp.host) return;
     setLoadingSmtp(true);
     api.get('/admin/marketing/smtp-config')
-      .then(r => { const d = r.data.data || {}; setSmtp(p => ({ ...p, ...d })); setSmtpConnected(!!d.host && !!d.user); })
+      .then(r => { 
+        const d = r.data.data || {}; 
+        setSmtp(p => ({ ...p, ...d })); 
+        setSmtpConnected(!!d.host && !!d.user && !!d.password); 
+      })
       .catch(() => {})
       .finally(() => setLoadingSmtp(false));
   }, [activeTab]);
@@ -103,21 +107,41 @@ export default function AdminSettingsPage() {
   const handleSaveSmtp = async () => {
     setSavingSmtp(true);
     try {
-      await api.put('/admin/marketing/smtp-config', smtp);
-      setSmtpConnected(!!smtp.host && !!smtp.user);
+      const response = await api.put('/admin/marketing/smtp-config', smtp);
+      const isConfigured = !!smtp.host && !!smtp.user && !!smtp.password;
+      setSmtpConnected(isConfigured);
       toast({ title: 'SMTP configurado correctamente' });
-    } catch (err) { toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message }); }
+    } catch (err) { 
+      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message }); 
+    }
     finally { setSavingSmtp(false); }
   };
 
   const handleTestSmtp = async () => {
-    if (!testEmail) return toast({ variant: 'destructive', title: 'Ingresa un email de prueba' });
-    setTesting(true); setTestResult(null);
+    if (!testEmail) {
+      return toast({ variant: 'destructive', title: 'Ingresa un email de prueba' });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(testEmail)) {
+      return toast({ variant: 'destructive', title: 'Email inválido', description: 'Por favor ingresa un email válido' });
+    }
+    
+    setTesting(true); 
+    setTestResult(null);
+    
     try {
-      await api.post('/admin/marketing/smtp/test', { to: testEmail });
-      setTestResult({ ok: true, msg: `Correo de prueba enviado a ${testEmail}` });
-    } catch (err) { setTestResult({ ok: false, msg: err.response?.data?.message || 'Error de conexión SMTP' }); }
-    finally { setTesting(false); }
+      const response = await api.post('/admin/marketing/smtp/test', { to: testEmail });
+      setTestResult({ ok: true, msg: response.data.message || `Correo de prueba enviado a ${testEmail}` });
+    } catch (err) { 
+      console.error('SMTP Test Error:', err.response?.data);
+      const errorMsg = err.response?.data?.message || 'Error de conexión SMTP';
+      setTestResult({ ok: false, msg: errorMsg }); 
+    }
+    finally { 
+      setTesting(false); 
+    }
   };
 
   if (!form) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-violet-600" /></div>;
@@ -347,13 +371,18 @@ export default function AdminSettingsPage() {
                 <span className={cn('text-xs font-semibold', smtpConnected ? 'text-green-600' : 'text-gray-400')}>
                   {smtpConnected ? 'Configurado' : 'Sin configurar'}
                 </span>
+                {!smtpConnected && smtp.host && (
+                  <span className="text-xs text-amber-600 ml-2">
+                    (Falta: {!smtp.host ? 'host' : ''}{!smtp.user ? (!smtp.host ? ', usuario' : 'usuario') : ''}{!smtp.password ? (!smtp.host || !smtp.user ? ', contraseña' : 'contraseña') : ''})
+                  </span>
+                )}
               </div>
               {loadingSmtp ? <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div> : (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     <div className="col-span-2 space-y-1.5">
-                      <Label>Host SMTP</Label>
-                      <Input value={smtp.host} onChange={e => setSmtp(p => ({ ...p, host: e.target.value }))} placeholder="smtp.gmail.com" />
+                      <Label>Host SMTP <span className="text-red-500">*</span></Label>
+                      <Input value={smtp.host} onChange={e => setSmtp(p => ({ ...p, host: e.target.value }))} placeholder="smtp-relay.brevo.com" />
                     </div>
                     <div className="space-y-1.5">
                       <Label>Puerto</Label>
@@ -362,13 +391,13 @@ export default function AdminSettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label>Usuario</Label>
-                      <Input value={smtp.user} onChange={e => setSmtp(p => ({ ...p, user: e.target.value }))} placeholder="usuario@dominio.com" />
+                      <Label>Usuario <span className="text-red-500">*</span></Label>
+                      <Input value={smtp.user} onChange={e => setSmtp(p => ({ ...p, user: e.target.value }))} placeholder="tu-email@gmail.com" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Contraseña</Label>
+                      <Label>Contraseña / SMTP Key <span className="text-red-500">*</span></Label>
                       <div className="relative">
-                        <Input type="password" value={smtp.password} onChange={e => setSmtp(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" className="pr-10" />
+                        <Input type="password" value={smtp.password} onChange={e => setSmtp(p => ({ ...p, password: e.target.value }))} placeholder="Tu SMTP key de Brevo" className="pr-10" />
                         <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       </div>
                     </div>
@@ -385,7 +414,7 @@ export default function AdminSettingsPage() {
                     <input type="checkbox" checked={smtp.secure} onChange={e => setSmtp(p => ({ ...p, secure: e.target.checked }))} className="w-4 h-4 accent-violet-600" />
                     <span className="text-sm text-gray-700">Usar SSL/TLS (puerto 465)</span>
                   </label>
-                  <Button onClick={handleSaveSmtp} disabled={savingSmtp} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
+                  <Button onClick={handleSaveSmtp} disabled={savingSmtp || !smtp.host || !smtp.user || !smtp.password} className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
                     {savingSmtp ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</> : <><CheckCircle2 className="w-4 h-4" /> Guardar SMTP</>}
                   </Button>
                 </div>
@@ -393,19 +422,40 @@ export default function AdminSettingsPage() {
             </Section>
 
             <Section title="Prueba de conexión" icon={<Zap className="w-4 h-4" />}>
-              <div className="flex gap-3">
-                <Input value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="email@destino.com" type="email" className="flex-1" />
-                <Button onClick={handleTestSmtp} disabled={testing || !smtpConnected} variant="outline" className="gap-2 shrink-0">
-                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Enviar prueba
-                </Button>
-              </div>
-              {testResult && (
-                <div className={cn('flex items-center gap-2 mt-3 p-3 rounded-xl text-sm border',
-                  testResult.ok ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200')}>
-                  {testResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
-                  {testResult.msg}
+              <div className="space-y-3">
+                {!smtpConnected && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>Primero debes configurar y guardar el SMTP (host, usuario y contraseña)</span>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <Input 
+                    value={testEmail} 
+                    onChange={e => setTestEmail(e.target.value)} 
+                    placeholder="email@destino.com" 
+                    type="email" 
+                    className="flex-1"
+                    disabled={!smtpConnected}
+                  />
+                  <Button 
+                    onClick={handleTestSmtp} 
+                    disabled={testing || !smtpConnected || !testEmail} 
+                    variant="outline" 
+                    className="gap-2 shrink-0"
+                  >
+                    {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} 
+                    Enviar prueba
+                  </Button>
                 </div>
-              )}
+                {testResult && (
+                  <div className={cn('flex items-center gap-2 mt-3 p-3 rounded-xl text-sm border',
+                    testResult.ok ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200')}>
+                    {testResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+                    {testResult.msg}
+                  </div>
+                )}
+              </div>
             </Section>
 
           </div>

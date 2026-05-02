@@ -10,6 +10,7 @@ import api from '@/lib/api';
 import dataCache from '@/lib/dataCache';
 import { formatDate } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useConfirm } from '@/hooks/use-confirm';
 
 const statusVariant = { active: 'success', inactive: 'secondary', suspended: 'destructive' };
 
@@ -21,6 +22,7 @@ export default function TeamPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '' });
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirm();
 
   const fetchData = async () => {
     try {
@@ -42,7 +44,7 @@ export default function TeamPage() {
     setSaving(true);
     try {
       await api.post('/users', form);
-      toast({ title: 'Usuario creado', description: `${form.name} fue agregado al equipo` });
+      toast({ title: 'Usuario creado', description: `${form.name} fue agregado al equipo`, variant: 'success' });
       setShowForm(false);
       setForm({ name: '', email: '', password: '', role_id: '' });
       fetchData();
@@ -51,11 +53,20 @@ export default function TeamPage() {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este usuario del equipo?')) return;
+  const handleDelete = async (id, name) => {
+    const confirmed = await confirm({
+      title: '¿Eliminar usuario?',
+      message: `¿Estás seguro de eliminar a "${name}" del equipo? Esta acción no se puede deshacer.`,
+      variant: 'danger',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+
+    if (!confirmed) return;
+
     try {
       await api.delete(`/users/${id}`);
-      toast({ title: 'Usuario eliminado' });
+      toast({ title: 'Usuario eliminado', variant: 'success' });
       fetchData();
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
@@ -181,7 +192,7 @@ export default function TeamPage() {
                       <td className="py-3 text-muted-foreground">{formatDate(user.created_at)}</td>
                       <td className="py-3">
                         <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600"
-                          onClick={() => handleDelete(user.id)}>
+                          onClick={() => handleDelete(user.id, user.name)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </td>

@@ -206,26 +206,55 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
 
                 const status = isSpecialSeat ? 'occupied' : getSeatStatus(seat.assignment);
                 const color  = isSpecialSeat ? specialConfig.color : SEAT_STATUS_COLORS[status];
-                const displayLabel = isSpecialSeat
-                  ? specialLabel.slice(0, 2).toUpperCase()
-                  : (seat.assignment?.guest_name ? seat.assignment.guest_name.slice(0, 2).toUpperCase() : '');
+                
+                // Determinar el label a mostrar
+                let displayLabel = '';
+                if (isSpecialSeat) {
+                  displayLabel = specialLabel.slice(0, 2).toUpperCase();
+                } else if (seat.assignment?.guest_name) {
+                  if (seat.assignment.is_companion) {
+                    // Mostrar +1, +2, etc. para acompañantes
+                    displayLabel = `+${seat.assignment.companion_index || '1'}`;
+                  } else {
+                    displayLabel = seat.assignment.guest_name.slice(0, 2).toUpperCase();
+                  }
+                }
+
+                // Tooltip mejorado
+                let tooltipText = '';
+                if (isSpecialSeat) {
+                  tooltipText = specialLabel;
+                } else if (seat.assignment?.guest_name) {
+                  if (seat.assignment.is_companion) {
+                    tooltipText = `${seat.assignment.guest_name} (Acompañante ${seat.assignment.companion_index})`;
+                  } else {
+                    tooltipText = seat.assignment.guest_name;
+                    if (seat.assignment.party_size > 1) {
+                      tooltipText += ` (${seat.assignment.party_size} personas)`;
+                    }
+                  }
+                } else {
+                  tooltipText = 'Libre';
+                }
 
                 return (
                   <div
                     key={seat.id}
                     onMouseDown={e => e.stopPropagation()}
                     onClick={e => { e.stopPropagation(); if (!isSpecialSeat) onSeatClick(seat, table); }}
-                    title={isSpecialSeat ? specialLabel : (seat.assignment?.guest_name || 'Libre')}
+                    title={tooltipText}
                     style={{
                       position: 'absolute',
                       left: pos.x - SEAT_R, top: pos.y - SEAT_R,
                       width: SEAT_R * 2, height: SEAT_R * 2,
                       borderRadius: '50%',
                       background: color,
-                      border: '2.5px solid #fff',
+                      border: seat.assignment?.is_companion ? '2.5px dashed #fff' : '2.5px solid #fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: isSpecialSeat ? 'default' : 'pointer',
-                      fontSize: 8, fontWeight: 700, color: '#fff',
+                      fontSize: seat.assignment?.is_companion ? 7 : 8, 
+                      fontWeight: 700, 
+                      color: '#fff',
                       zIndex: 3,
                       boxShadow: `0 2px 6px ${color}55`,
                       transition: 'transform 0.15s',
@@ -270,14 +299,28 @@ function AccordionTable({ table, tColor, tLabel, assignedSeats, specialConfig, g
             <p className="text-xs text-gray-400 px-3 py-2 italic">Sin invitados asignados</p>
           ) : (table.seats || []).map((seat, i) => {
             const sl = table.is_bride_table && specialConfig ? (specialConfig.specialSeats[i] || null) : null;
-            const name = sl || seat.assignment?.guest_name;
-            if (!name) return null;
-            const status = sl ? 'occupied' : getSeatStatus(seat.assignment);
+            const assignment = seat.assignment;
+            
+            if (!sl && !assignment) return null;
+            
+            const name = sl || assignment?.guest_name;
+            const status = sl ? 'occupied' : getSeatStatus(assignment);
             const dotColor = SEAT_STATUS_COLORS[status];
+            const isCompanion = assignment?.is_companion;
+            const companionIndex = assignment?.companion_index;
+            
             return (
               <div key={seat.id} className="flex items-center gap-2 px-3 py-1.5">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dotColor }} />
-                <span className="text-xs text-gray-700 truncate">{name}</span>
+                <span 
+                  className="w-2 h-2 rounded-full flex-shrink-0" 
+                  style={{ 
+                    background: dotColor,
+                    border: isCompanion ? '1px dashed rgba(0,0,0,0.2)' : 'none'
+                  }} 
+                />
+                <span className={`text-xs truncate ${isCompanion ? 'text-gray-500 italic' : 'text-gray-700'}`}>
+                  {isCompanion ? `↳ Acompañante ${companionIndex}` : name}
+                </span>
               </div>
             );
           })}
@@ -441,17 +484,92 @@ export default function SeatingTab({ planId }) {
 
   const assignGuest = async (guestId) => {
     if (!selectedSeat || !selectedSeatTable) return;
+    
+    const guest = guests.find(g => g.id === guestId);
+    if (!guest) return;
+
+    const partySize = guest.party_size || 1;
+
+    // Si el invitado tiene acompañantes, mostrar diálogo de confirmación
+    if (partySize > 1) {
+      const availableSeats = (selectedSeatTable.seats || []).filter(s => !s.assignment);
+      const seatsNeeded = partySize;
+      
+      if (availableSeats.length < seatsNeeded) {
+        toast({
+          variant: 'warning',
+          title: 'Asientos insuficientes',
+          description: `Este invitado necesita ${seatsNeeded} asientos pero solo hay ${availableSeats.length} disponibles en esta mesa.`,
+        });
+        
+        // Preguntar si quiere asignar solo al invitado principal
+        const shouldContinue = confirm(
+          `${guest.name} tiene ${partySize} personas en su grupo pero solo hay ${availableSeats.length} asientos disponibles.\n\n¿Deseas asignar solo al invitado principal en este asiento?`
+        );
+        
+        if (!shouldContinue) return;
+      }
+    }
+
     try {
+      // Asignar al invitado principal
       await api.post(
         `/planner/${planId}/seating/tables/${selectedSeatTable.id}/seats/${selectedSeat.id}/assign`,
         { guest_id: guestId }
       );
+
+      // Si tiene acompañantes, intentar asignarlos automáticamente
+      if (partySize > 1) {
+        const availableSeats = (selectedSeatTable.seats || [])
+          .filter(s => !s.assignment && s.id !== selectedSeat.id)
+          .slice(0, partySize - 1);
+
+        let assignedCompanions = 0;
+        for (const seat of availableSeats) {
+          try {
+            // Crear un registro virtual para el acompañante
+            await api.post(
+              `/planner/${planId}/seating/tables/${selectedSeatTable.id}/seats/${seat.id}/assign`,
+              { 
+                guest_id: guestId,
+                is_companion: true,
+                companion_index: assignedCompanions + 1
+              }
+            );
+            assignedCompanions++;
+          } catch (err) {
+            console.error('Error asignando acompañante:', err);
+          }
+        }
+
+        if (assignedCompanions > 0) {
+          toast({
+            title: 'Invitado y acompañantes asignados',
+            description: `Se asignó a ${guest.name} + ${assignedCompanions} acompañante(s)`,
+            variant: 'success',
+          });
+        } else {
+          toast({
+            title: 'Invitado asignado',
+            description: 'No se pudieron asignar los acompañantes automáticamente',
+            variant: 'warning',
+          });
+        }
+      } else {
+        toast({ 
+          title: 'Invitado asignado',
+          variant: 'success',
+        });
+      }
+
       await loadTables();
       setShowGuestSelector(false);
       setSelectedSeat(null);
-      toast({ title: 'Invitado asignado' });
     } catch (err) {
-      toast({ variant: 'destructive', title: err.response?.data?.message || 'Error al asignar' });
+      toast({ 
+        variant: 'destructive', 
+        title: err.response?.data?.message || 'Error al asignar' 
+      });
     }
   };
 
@@ -633,10 +751,10 @@ export default function SeatingTab({ planId }) {
       {showGuestSelector && selectedSeat && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onClick={() => { setShowGuestSelector(false); setSelectedSeat(null); }}>
           <div
-            className="bg-white rounded-xl shadow-2xl w-80 max-h-96 overflow-y-auto"
+            className="bg-white rounded-xl shadow-2xl w-96 max-h-[32rem] overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
               <h3 className="font-semibold text-gray-900 text-sm">
                 {selectedSeat.assignment ? 'Asiento ocupado' : 'Asignar invitado'}
               </h3>
@@ -644,11 +762,21 @@ export default function SeatingTab({ planId }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-3 space-y-1">
+            <div className="p-3 space-y-1 overflow-y-auto flex-1">
               {selectedSeat.assignment && (
                 <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-900">{selectedSeat.assignment.guest_name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{selectedSeat.assignment.rsvp_status || 'Sin RSVP'}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{selectedSeat.assignment.guest_name}</p>
+                      <p className="text-xs text-gray-500 capitalize">{selectedSeat.assignment.rsvp_status || 'Sin RSVP'}</p>
+                      {selectedSeat.assignment.party_size > 1 && (
+                        <p className="text-xs text-violet-600 font-medium mt-1">
+                          <Users className="w-3 h-3 inline mr-1" />
+                          {selectedSeat.assignment.party_size} personas
+                        </p>
+                      )}
+                    </div>
+                  </div>
                   <button
                     onClick={unassignGuest}
                     className="mt-2 w-full h-8 rounded-md border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
@@ -664,9 +792,22 @@ export default function SeatingTab({ planId }) {
                 <button
                   key={g.id}
                   onClick={() => assignGuest(g.id)}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-violet-50 text-sm text-gray-800 transition-colors"
+                  className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-violet-50 transition-colors border border-transparent hover:border-violet-200"
                 >
-                  {g.name || g.full_name || g.id}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{g.name || g.full_name || g.id}</p>
+                      {g.group_name && (
+                        <p className="text-xs text-gray-500 truncate">{g.group_name}</p>
+                      )}
+                    </div>
+                    {g.party_size > 1 && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold flex-shrink-0">
+                        <Users className="w-3 h-3" />
+                        <span>{g.party_size}</span>
+                      </div>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>

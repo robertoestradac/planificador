@@ -75,6 +75,7 @@ const BLOCK_HEIGHTS = {
   gallery: 450, gifts: 320, schedule: 650, countdown: 200,
   map: 300, rsvp: 280, music_player: 100, couple: 280,
   video: 300, hospedaje: 250, dress_code: 200,
+  gif: 200,
 };
 
 function autoLayoutSections(sections) {

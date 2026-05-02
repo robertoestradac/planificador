@@ -5,6 +5,7 @@ import {
   ArrowLeft, Loader2, Save, Globe, EyeOff,
   Monitor, Smartphone, Undo2, Redo2, ExternalLink,
   Layers, Pencil, Palette, Music2, Type, Image,
+  Download, Upload,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -96,6 +97,7 @@ const BLOCK_HEIGHTS = {
   gallery: 450, gifts: 320, schedule: 650, countdown: 200,
   map: 300, rsvp: 280, music_player: 100, couple: 280,
   video: 300, hospedaje: 250, dress_code: 200, confirm: 250,
+  gif: 200,
 };
 
 /**
@@ -177,11 +179,18 @@ export default function BuilderPage() {
 
   // ── Load invitation ──────────────────────────────────────────
   useEffect(() => {
-    api.get(`/invitations/${id}`)
-      .then(({ data }) => {
+    let isMounted = true;
+    
+    const loadInvitation = async () => {
+      try {
+        const { data } = await api.get(`/invitations/${id}`);
+        
+        if (!isMounted) return;
+        
         const inv = data.data;
         setInvitation(inv);
         setIsPublished(inv.status === 'published');
+        
         if (inv.builder_json) {
           try {
             const parsed = JSON.parse(inv.builder_json);
@@ -199,15 +208,36 @@ export default function BuilderPage() {
               setGlobalTheme({ ...DEFAULT_THEME, ...parsed.theme });
               if (parsed.theme.canvasMode) setCanvasMode(parsed.theme.canvasMode);
             }
-          } catch { setSections([]); }
+          } catch (parseError) {
+            console.error('Error parsing builder_json:', parseError);
+            setSections([]);
+          }
         }
-      })
-      .catch(() => toast({ variant: 'destructive', title: 'Error al cargar la invitación' }))
-      .finally(() => setLoading(false));
+      } catch (error) {
+        console.error('Error loading invitation:', error);
+        if (isMounted) {
+          toast({ 
+            variant: 'destructive', 
+            title: 'Error al cargar la invitación',
+            description: error.response?.data?.message || 'No se pudo cargar la invitación'
+          });
+          // Redirect to invitations list after error
+          setTimeout(() => router.push('/dashboard/invitations'), 2000);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadInvitation();
 
     const handleBeforeUnload = (e) => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', handleBeforeUnload);
+    
     return () => {
+      isMounted = false;
       window.removeEventListener('beforeunload', handleBeforeUnload);
       cleanupAutoSave();
     };
@@ -240,6 +270,151 @@ export default function BuilderPage() {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
     } finally { setPublishing(false); }
   };
+
+  // ══════════════════════════════════════════════════════════════
+  // EXPORT TEMPLATE - Download as .plan file
+  // ══════════════════════════════════════════════════════════════
+  const exportTemplate = useCallback(() => {
+    try {
+      if (sections.length === 0) {
+        toast({ 
+          variant: 'destructive',
+          title: 'Sin contenido', 
+          description: 'No hay secciones para exportar' 
+        });
+        return;
+      }
+
+      const templateData = {
+        version: '1.0',
+        appName: 'Planificador de Invitaciones',
+        exportDate: new Date().toISOString(),
+        invitation: {
+          title: invitation?.title || 'Sin título',
+          type: invitation?.type || 'boda',
+        },
+        sections: sections,
+        theme: {
+          ...globalTheme,
+          canvasMode: canvasMode,
+        },
+      };
+
+      const jsonString = JSON.stringify(templateData, null, 2);
+      // Use 'application/octet-stream' to force download with exact extension
+      const blob = new Blob([jsonString], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanTitle = (invitation?.title || 'plantilla').replace(/[^a-z0-9áéíóúñ\s\-_]/gi, '').trim() || 'plantilla';
+      const fileName = `${cleanTitle}.plan`;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({ 
+        title: '✓ Plantilla exportada', 
+        description: `Archivo ${fileName} descargado exitosamente` 
+      });
+    } catch (error) {
+      console.error('Error exporting template:', error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Error al exportar', 
+        description: 'No se pudo exportar la plantilla' 
+      });
+    }
+  }, [sections, globalTheme, canvasMode, invitation]);
+
+  // ══════════════════════════════════════════════════════════════
+  // IMPORT TEMPLATE - Load from .plan file
+  // ══════════════════════════════════════════════════════════════
+  const importTemplate = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.plan';
+    
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Validate file extension
+      if (!file.name.endsWith('.plan')) {
+        toast({ 
+          variant: 'destructive', 
+          title: 'Archivo inválido', 
+          description: 'Solo se permiten archivos .plan' 
+        });
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const templateData = JSON.parse(text);
+
+        // Validate structure
+        if (!templateData.sections || !Array.isArray(templateData.sections)) {
+          throw new Error('Formato de plantilla inválido - falta el array de secciones');
+        }
+
+        if (!templateData.version) {
+          throw new Error('Formato de plantilla inválido - falta la versión');
+        }
+
+        // Confirm before loading
+        if (sections.length > 0) {
+          const confirmed = confirm(
+            '¿Importar esta plantilla?\n\n' +
+            `Se reemplazará el contenido actual (${sections.length} secciones) ` +
+            `con ${templateData.sections.length} secciones nuevas.\n\n` +
+            'Asegúrate de haber guardado tus cambios.'
+          );
+          if (!confirmed) return;
+        }
+
+        // Load sections using history (for undo/redo support)
+        updateSections(templateData.sections);
+        
+        // Load theme
+        if (templateData.theme) {
+          const newTheme = { ...DEFAULT_THEME, ...templateData.theme };
+          setGlobalTheme(newTheme);
+          
+          // Load canvas mode
+          if (templateData.theme.canvasMode) {
+            setCanvasMode(templateData.theme.canvasMode);
+            
+            // If switching to free mode, ensure layout is applied
+            if (templateData.theme.canvasMode === 'free') {
+              freeLayoutDone.current = true; // Prevent auto-layout since we're loading positioned sections
+              setShowLayers(true);
+            }
+          }
+        }
+
+        // Mark as dirty and schedule save
+        setIsDirty(true);
+        scheduleAutoSave(1000);
+
+        toast({ 
+          title: '✓ Plantilla importada', 
+          description: `${templateData.sections.length} secciones cargadas exitosamente` 
+        });
+      } catch (error) {
+        console.error('Error importing template:', error);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Error al importar plantilla', 
+          description: error.message || 'El archivo no es una plantilla válida' 
+        });
+      }
+    };
+
+    input.click();
+  }, [sections, updateSections, setGlobalTheme, setCanvasMode, setIsDirty, scheduleAutoSave]);
 
   // ── DnD sensors ─────────────────────────────────────────────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -482,8 +657,31 @@ export default function BuilderPage() {
             </button>
           </div>
 
-          {/* Right: save + publish */}
+          {/* Right: download/upload + save + publish */}
           <div className="flex items-center gap-2">
+            {/* Export Template */}
+            <button
+              onClick={exportTemplate}
+              disabled={sections.length === 0}
+              className="p-2 rounded-xl text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors tooltip disabled:opacity-40"
+              data-tip="Exportar plantilla (.plan)"
+              title="Exportar plantilla"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            {/* Import Template */}
+            <button
+              onClick={importTemplate}
+              className="p-2 rounded-xl text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors tooltip"
+              data-tip="Importar plantilla (.plan)"
+              title="Importar plantilla"
+            >
+              <Upload className="w-4 h-4" />
+            </button>
+
+            <div className="w-px h-5 bg-gray-200" />
+
             {isPublished && invitation?.slug && (
               <a href={`/i/${invitation.slug}`} target="_blank" rel="noopener noreferrer"
                 className="p-2 rounded-xl text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-colors tooltip" data-tip="Ver publicada">

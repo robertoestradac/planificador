@@ -442,8 +442,8 @@ const PlannerModel = {
     const tableIds = tables.map(t => t.id);
     const [seats] = await pool.query(
       `SELECT ps.id, ps.table_id, ps.seat_index,
-              psa.id AS assignment_id, psa.guest_id,
-              g.name AS guest_name,
+              psa.id AS assignment_id, psa.guest_id, psa.is_companion, psa.companion_index,
+              g.name AS guest_name, g.party_size,
               r.response AS rsvp_status
        FROM plan_seats ps
        LEFT JOIN plan_seat_assignments psa ON psa.seat_id = ps.id
@@ -465,6 +465,9 @@ const PlannerModel = {
           guest_id: seat.guest_id,
           guest_name: seat.guest_name,
           rsvp_status: seat.rsvp_status || null,
+          party_size: seat.party_size || 1,
+          is_companion: seat.is_companion || false,
+          companion_index: seat.companion_index || null,
         } : null,
       });
     }
@@ -550,17 +553,17 @@ const PlannerModel = {
     }
   },
 
-  async assignSeat(seatId, tableId, planId, guestId) {
+  async assignSeat(seatId, tableId, planId, guestId, isCompanion = false, companionIndex = null) {
     // Remove any existing assignment for this seat
     await pool.query('DELETE FROM plan_seat_assignments WHERE seat_id = ?', [seatId]);
     await pool.query(
-      'INSERT INTO plan_seat_assignments (id, seat_id, guest_id, plan_id) VALUES (?, ?, ?, ?)',
-      [uuidv4(), seatId, guestId, planId]
+      'INSERT INTO plan_seat_assignments (id, seat_id, guest_id, plan_id, is_companion, companion_index) VALUES (?, ?, ?, ?, ?, ?)',
+      [uuidv4(), seatId, guestId, planId, isCompanion ? 1 : 0, companionIndex]
     );
     const [rows] = await pool.query(
       `SELECT ps.id, ps.seat_index,
-              psa.id AS assignment_id, psa.guest_id,
-              g.name AS guest_name, r.response AS rsvp_status
+              psa.id AS assignment_id, psa.guest_id, psa.is_companion, psa.companion_index,
+              g.name AS guest_name, g.party_size, r.response AS rsvp_status
        FROM plan_seats ps
        LEFT JOIN plan_seat_assignments psa ON psa.seat_id = ps.id
        LEFT JOIN guests g ON g.id = psa.guest_id

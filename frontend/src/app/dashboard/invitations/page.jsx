@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Plus, Mail, Eye, Pencil, Trash2, Globe, FileText,
-  ExternalLink, X, Smartphone, Monitor, Loader2, Layers,
+  ExternalLink, X, Smartphone, Monitor, Loader2, Layers, Upload,
 } from 'lucide-react';
 import NoPlanBanner from '@/components/ui/no-plan-banner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -382,6 +382,100 @@ export default function InvitationsPage() {
     }
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // GLOBAL IMPORT - Create new invitation from .plan file
+  // ══════════════════════════════════════════════════════════════
+  const handleGlobalImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.plan';
+    
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Validate file extension
+      if (!file.name.endsWith('.plan')) {
+        toast({ 
+          variant: 'destructive', 
+          title: 'Archivo inválido', 
+          description: 'Solo se permiten archivos .plan' 
+        });
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const templateData = JSON.parse(text);
+
+        // Validate structure
+        if (!templateData.sections || !Array.isArray(templateData.sections)) {
+          throw new Error('Formato de plantilla inválido - falta el array de secciones');
+        }
+
+        if (!templateData.version) {
+          throw new Error('Formato de plantilla inválido - falta la versión');
+        }
+
+        // Extract name from file or template data
+        const defaultTitle = templateData.invitation?.title || file.name.replace('.plan', '');
+        const invitationTitle = prompt(
+          `Título para la nueva invitación:\n\n` +
+          `Se importarán ${templateData.sections.length} secciones.`,
+          defaultTitle
+        );
+        
+        if (!invitationTitle || !invitationTitle.trim()) {
+          toast({ title: 'Importación cancelada' });
+          return;
+        }
+
+        // Prepare builder_json
+        const builderJson = {
+          sections: templateData.sections,
+          theme: templateData.theme || {},
+        };
+
+        // Create new invitation with imported content
+        const { data } = await api.post('/invitations', {
+          title: invitationTitle.trim(),
+          type: templateData.invitation?.type || 'boda',
+          event_id: form.event_id || null,
+        });
+
+        const newInvitationId = data.data.id;
+
+        // Update with imported content
+        await api.put(`/invitations/${newInvitationId}`, {
+          builder_json: JSON.stringify(builderJson),
+        });
+
+        toast({ 
+          title: '✓ Invitación importada', 
+          description: `"${invitationTitle}" creada con ${templateData.sections.length} secciones` 
+        });
+
+        // Add to local state
+        setInvitations(prev => [data.data, ...prev]);
+        
+        // Refresh to get updated data
+        fetchAll();
+      } catch (error) {
+        console.error('Error importing invitation:', error);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Error al importar invitación', 
+          description: error.message || 'El archivo no es una plantilla válida' 
+        });
+      }
+    };
+
+    input.click();
+  };
+      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+    }
+  };
+
   if (noPlan) return <NoPlanBanner description="Tu plan no tiene permiso para usar este módulo o aún no cuentas con un plan activo. Elige un plan para crear invitaciones." />;
 
   return (
@@ -391,9 +485,18 @@ export default function InvitationsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Invitaciones</h1>
           <p className="text-gray-500 mt-1">Crea y gestiona tus invitaciones digitales</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="w-4 h-4 mr-2" /> Nueva Invitación
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline"
+            onClick={handleGlobalImport}
+            className="gap-2"
+          >
+            <Upload className="w-4 h-4" /> Importar
+          </Button>
+          <Button onClick={() => setShowForm(!showForm)}>
+            <Plus className="w-4 h-4 mr-2" /> Nueva Invitación
+          </Button>
+        </div>
       </div>
 
       {showForm && (

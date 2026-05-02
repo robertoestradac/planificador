@@ -41,13 +41,14 @@ module.exports = {
   },
 
   rateLimit: {
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,
-    max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,
-    loginMax: parseInt(process.env.LOGIN_RATE_LIMIT_MAX, 10) || 10,
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60000,   // 1 minuto (antes 15 min)
+    max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 500,                // 500 peticiones/min (antes 100)
+    loginMax: parseInt(process.env.LOGIN_RATE_LIMIT_MAX, 10) || 10,      // 10 intentos login/15min
   },
 
   app: {
     domain: process.env.APP_DOMAIN || 'localhost',
     protocol: process.env.APP_PROTOCOL || 'http',
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   },
 };

@@ -4,6 +4,7 @@ const { pool } = require('../../database/connection');
 const TenantsModel = require('./tenants.model');
 const AppError = require('../../utils/AppError');
 const attachTenant = require('../../middlewares/attachTenant');
+const { getPlanExpirationDate } = require('../../utils/planHelpers');
 
 const TenantsService = {
   async create(data) {
@@ -59,9 +60,16 @@ const TenantsService = {
       }
 
       if (hasPlan) {
+        // ✅ Get plan with duration_months
+        const [[plan]] = await conn.query(
+          'SELECT id, duration_months FROM plans WHERE id = ? AND is_active = 1',
+          [plan_id]
+        );
+        if (!plan) throw new AppError('Invalid plan', 400);
+
         const now = new Date();
-        const expires = new Date(now);
-        expires.setFullYear(expires.getFullYear() + 1);
+        // ✅ Calculate expiration based on plan's duration_months
+        const expires = getPlanExpirationDate(plan, now);
         await conn.query(
           'INSERT INTO subscriptions (id, tenant_id, plan_id, starts_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?)',
           [uuidv4(), tenantId, plan_id, now, expires, 'active']
@@ -131,7 +139,7 @@ const TenantsService = {
 
     // Update subscription plan
     if (plan_id) {
-      const [[plan]] = await pool.query('SELECT id FROM plans WHERE id = ? AND is_active = 1', [plan_id]);
+      const [[plan]] = await pool.query('SELECT id, duration_months FROM plans WHERE id = ? AND is_active = 1', [plan_id]);
       if (!plan) throw new AppError('Plan inválido', 400);
 
       const [[activeSub]] = await pool.query(
@@ -141,8 +149,8 @@ const TenantsService = {
         await pool.query('UPDATE subscriptions SET plan_id = ? WHERE id = ?', [plan_id, activeSub.id]);
       } else {
         const now = new Date();
-        const expires = new Date(now);
-        expires.setFullYear(expires.getFullYear() + 1);
+        // ✅ Calculate expiration based on plan's duration_months
+        const expires = getPlanExpirationDate(plan, now);
         await pool.query(
           'INSERT INTO subscriptions (id, tenant_id, plan_id, starts_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?)',
           [uuidv4(), id, plan_id, now, expires, 'active']

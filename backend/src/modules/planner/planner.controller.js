@@ -235,7 +235,16 @@ const PlannerController = {
 
   async assignSeat(req, res, next) {
     try {
-      const data = await PlannerService.assignSeat(req.params.seatId, req.params.tableId, req.params.planId, req.tenantId, req.body.guest_id);
+      const { guest_id, is_companion, companion_index } = req.body;
+      const data = await PlannerService.assignSeat(
+        req.params.seatId, 
+        req.params.tableId, 
+        req.params.planId, 
+        req.tenantId, 
+        guest_id,
+        is_companion || false,
+        companion_index || null
+      );
       return success(res, data, 'Seat assigned');
     } catch (err) { next(err); }
   },
