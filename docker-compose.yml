@@ -47,7 +47,7 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.new
+      dockerfile: Dockerfile
     container_name: backend
     restart: unless-stopped
     depends_on:

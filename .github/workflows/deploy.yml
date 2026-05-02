@@ -21,7 +21,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /path/to/your/project
+            cd /opt/planificador
             git pull origin main
-            docker-compose build
-            docker-compose up -d
+            docker compose build
+            docker compose up -d
+            echo "✅ Deployment completed"
+            docker compose ps
