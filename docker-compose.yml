@@ -22,11 +22,8 @@ services:
     image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
-    depends_on:
-      - docker-socket-proxy
     command:
       - --providers.docker=true
-      - --providers.docker.endpoint=tcp://docker-socket-proxy:2375
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
@@ -41,9 +38,9 @@ services:
       - "443:443"
     volumes:
       - traefik_letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - web
-      - socket-proxy
 
   mysql:
     image: mysql:8.0
