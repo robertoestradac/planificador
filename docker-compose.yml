@@ -19,7 +19,7 @@ services:
       - socket-proxy
 
   traefik:
-    image: traefik:v3.5
+    image: traefik:v2.11
     container_name: traefik
     restart: unless-stopped
     command:
