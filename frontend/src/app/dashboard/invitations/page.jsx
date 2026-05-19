@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Plus, Mail, Eye, Pencil, Trash2, Globe, FileText,
   ExternalLink, X, Smartphone, Monitor, Loader2, Layers, Upload,
+  Copy, Check, MessageCircle, Download,
 } from 'lucide-react';
 import NoPlanBanner from '@/components/ui/no-plan-banner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -178,7 +179,7 @@ function InvitationCardThumbnail({ invitationId }) {
 }
 
 /* ─── Preview Modal ─────────────────────────────────────────── */
-function InvitationPreviewModal({ invitation, onClose }) {
+function InvitationPreviewModal({ invitation, onClose, onCopyLink, copiedId, onShareWhatsApp, onDownloadPdf, generatingPdf }) {
   const [device, setDevice] = useState('mobile');
   const [full, setFull] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -234,12 +235,43 @@ function InvitationPreviewModal({ invitation, onClose }) {
               </Button>
             </Link>
             {invitation.status === 'published' && (
-              <a href={`/i/${invitation.slug}`} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" variant="outline" className="gap-1.5">
-                  <ExternalLink className="w-3.5 h-3.5" /> Ver
+              <>
+                <a href={`/i/${invitation.slug}`} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> Ver
+                  </Button>
+                </a>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5 text-green-600 border-green-200 hover:bg-green-50"
+                  onClick={() => onShareWhatsApp(invitation)}
+                  title="Compartir por WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
                 </Button>
-              </a>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5"
+                  onClick={() => onCopyLink(invitation)}
+                  title="Copiar link"
+                >
+                  {copiedId === invitation.id
+                    ? <Check className="w-3.5 h-3.5 text-green-500" />
+                    : <Copy className="w-3.5 h-3.5" />}
+                </Button>
+              </>
             )}
+            <Button
+              size="sm" variant="outline"
+              className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+              onClick={() => onDownloadPdf(invitation)}
+              disabled={generatingPdf === invitation.id}
+              title="Descargar PDF"
+            >
+              {generatingPdf === invitation.id
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Download className="w-3.5 h-3.5" />}
+            </Button>
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors">
               <X className="w-4 h-4 text-gray-500" />
             </button>
@@ -307,6 +339,136 @@ function InvitationPreviewModal({ invitation, onClose }) {
   );
 }
 
+/* ─── Copy link helper ──────────────────────────────────────── */
+function getInvitationUrl(slug) {
+  const base = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${base}/i/${slug}`;
+}
+
+function useCopyLink() {
+  const [copiedId, setCopiedId] = useState(null);
+  const copy = async (inv) => {
+    const url = getInvitationUrl(inv.slug);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopiedId(inv.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+  return { copiedId, copy };
+}
+
+function shareWhatsApp(inv) {
+  const url = getInvitationUrl(inv.slug);
+  const text = encodeURIComponent(`¡Estás invitado! 🎉\n${inv.title}\n\nVe tu invitación aquí: ${url}`);
+  window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
+}
+
+/* ─── Invitation PDF generator ──────────────────────────────── */
+async function generateInvitationPdf(inv, sections, theme) {
+  const { jsPDF } = await import('jspdf');
+  const html2canvas = (await import('html2canvas')).default;
+
+  // Build a hidden off-screen container with the invitation rendered at 390px
+  const container = document.createElement('div');
+  container.style.cssText = `
+    position: fixed; left: -9999px; top: 0;
+    width: 390px; background: white;
+    font-family: sans-serif; z-index: -1;
+  `;
+  document.body.appendChild(container);
+
+  // Render the invitation sections into the container using a simple iframe approach
+  // We use the public URL if published, otherwise render a placeholder
+  let canvas;
+  try {
+    if (inv.status === 'published' && inv.slug) {
+      // Capture from the live iframe
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:800px;border:none;';
+      iframe.src = `/i/${inv.slug}`;
+      document.body.appendChild(iframe);
+
+      await new Promise((resolve) => {
+        iframe.onload = resolve;
+        setTimeout(resolve, 4000); // max wait 4s
+      });
+      await new Promise(r => setTimeout(r, 1000)); // extra settle time
+
+      canvas = await html2canvas(iframe.contentDocument?.body || iframe, {
+        width: 390,
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+        logging: false,
+      });
+      document.body.removeChild(iframe);
+    } else {
+      // Fallback: render a styled placeholder card
+      container.innerHTML = `
+        <div style="width:390px;min-height:600px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;box-sizing:border-box;">
+          <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:40px;text-align:center;width:100%;">
+            <div style="font-size:48px;margin-bottom:16px;">✉️</div>
+            <h1 style="color:white;font-size:24px;font-weight:bold;margin:0 0 12px;">${inv.title}</h1>
+            <p style="color:rgba(255,255,255,0.8);font-size:14px;margin:0 0 8px;">${inv.event_name || ''}</p>
+            <p style="color:rgba(255,255,255,0.6);font-size:12px;margin:0;">(Borrador — publica la invitación para ver el diseño completo)</p>
+          </div>
+        </div>
+      `;
+      canvas = await html2canvas(container, {
+        width: 390,
+        useCORS: true,
+        scale: 2,
+        logging: false,
+      });
+    }
+  } finally {
+    if (document.body.contains(container)) document.body.removeChild(container);
+  }
+
+  // Build PDF — A4 portrait, fit width
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = 210;
+  const pageH = 297;
+  const imgW = pageW;
+  const imgH = (canvas.height / canvas.width) * imgW;
+
+  // If content is taller than one page, split across pages
+  let yOffset = 0;
+  const pageImgH = pageH;
+
+  while (yOffset < imgH) {
+    if (yOffset > 0) pdf.addPage();
+    pdf.addImage(
+      canvas.toDataURL('image/jpeg', 0.92),
+      'JPEG',
+      0, -yOffset,
+      imgW, imgH
+    );
+    yOffset += pageImgH;
+  }
+
+  // Footer
+  const totalPages = pdf.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    pdf.setPage(i);
+    pdf.setFontSize(7);
+    pdf.setTextColor(180, 180, 180);
+    pdf.text('InvitApp — Invitación digital', pageW / 2, pageH - 4, { align: 'center' });
+  }
+
+  const filename = `invitacion-${(inv.title || 'invitacion').toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`;
+  pdf.save(filename);
+}
+
 const emptyForm = { event_id: '', title: '', template_id: '' };
 
 export default function InvitationsPage() {
@@ -320,6 +482,8 @@ export default function InvitationsPage() {
   const [form, setForm] = useState({ ...emptyForm, event_id: searchParams.get('event_id') || '' });
   const [saving, setSaving] = useState(false);
   const [previewInv, setPreviewInv] = useState(null);
+  const { copiedId, copy: copyLink } = useCopyLink();
+  const [generatingPdf, setGeneratingPdf] = useState(null); // inv.id while generating
 
   const fetchAll = async () => {
     try {
@@ -351,7 +515,15 @@ export default function InvitationsPage() {
       // Agrega la nueva invitación al estado local (evita recargar todo)
       setInvitations(prev => [data.data, ...prev]);
     } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+      const msg = err.response?.data?.message || 'Error al crear invitación';
+      const isLimitError = err.response?.status === 403 && msg.includes('Límite');
+      toast({
+        variant: 'destructive',
+        title: isLimitError ? 'Límite de plan alcanzado' : 'Error',
+        description: isLimitError
+          ? msg + ' Ve a Mi Plan para adquirir más créditos.'
+          : msg,
+      });
     } finally { setSaving(false); }
   };
 
@@ -379,6 +551,23 @@ export default function InvitationsPage() {
       setInvitations(prev => prev.filter(inv => inv.id !== id));
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+    }
+  };
+
+  const handleDownloadPdf = async (inv) => {
+    setGeneratingPdf(inv.id);
+    try {
+      // Fetch full invitation data (builder_json)
+      const { data } = await api.get(`/invitations/${inv.id}`);
+      const full = data.data;
+      const { sections, theme } = parseBuilderJson(full?.builder_json);
+      await generateInvitationPdf(inv, sections, theme);
+      toast({ title: '✅ PDF generado', description: `${inv.title}.pdf descargado` });
+    } catch (err) {
+      console.error('PDF error:', err);
+      toast({ variant: 'destructive', title: 'Error al generar PDF', description: 'Intenta de nuevo' });
+    } finally {
+      setGeneratingPdf(null);
     }
   };
 
@@ -472,9 +661,6 @@ export default function InvitationsPage() {
 
     input.click();
   };
-      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
-    }
-  };
 
   if (noPlan) return <NoPlanBanner description="Tu plan no tiene permiso para usar este módulo o aún no cuentas con un plan activo. Elige un plan para crear invitaciones." />;
 
@@ -493,7 +679,7 @@ export default function InvitationsPage() {
           >
             <Upload className="w-4 h-4" /> Importar
           </Button>
-          <Button onClick={() => setShowForm(!showForm)}>
+          <Button data-tour="create-invitation-btn" onClick={() => setShowForm(!showForm)}>
             <Plus className="w-4 h-4 mr-2" /> Nueva Invitación
           </Button>
         </div>
@@ -506,19 +692,26 @@ export default function InvitationsPage() {
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <Label>Título</Label>
-                <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                <Input data-tour="invitation-title-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
                   required placeholder="Invitación a la boda de Ana y Carlos" />
               </div>
               <div>
                 <Label>Evento</Label>
                 <select
+                  data-tour="invitation-event-select"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.event_id}
                   onChange={e => setForm({ ...form, event_id: e.target.value })}
                   required
                 >
                   <option value="">Selecciona un evento</option>
-                  {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+                  {events
+                    .filter(ev => !invitations.some(inv => inv.event_id === ev.id))
+                    .map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)
+                  }
+                  {events.filter(ev => !invitations.some(inv => inv.event_id === ev.id)).length === 0 && (
+                    <option disabled>-- Todos los eventos ya tienen invitacion --</option>
+                  )}
                 </select>
               </div>
               <div>
@@ -533,7 +726,7 @@ export default function InvitationsPage() {
                 </select>
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <Button type="submit" disabled={saving}>{saving ? 'Creando...' : 'Crear invitación'}</Button>
+                <Button data-tour="invitation-submit-btn" type="submit" disabled={saving}>{saving ? 'Creando...' : 'Crear invitación'}</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               </div>
             </form>
@@ -558,7 +751,7 @@ export default function InvitationsPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {invitations.map(inv => (
+          {invitations.map((inv, idx) => (
             <Card key={inv.id} className="group overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5">
               {/* Thumbnail */}
               <div
@@ -577,7 +770,10 @@ export default function InvitationsPage() {
                       <Eye className="w-3.5 h-3.5" /> Vista previa
                     </button>
                     <Link href={`/dashboard/builder/${inv.id}`} onClick={e => e.stopPropagation()}>
-                      <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/90 text-white text-xs font-semibold shadow hover:bg-violet-700 transition-colors">
+                      <button
+                        data-tour={idx === 0 ? 'invitation-builder-btn' : undefined}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/90 text-white text-xs font-semibold shadow hover:bg-violet-700 transition-colors"
+                      >
                         <Pencil className="w-3.5 h-3.5" /> Builder
                       </button>
                     </Link>
@@ -597,6 +793,7 @@ export default function InvitationsPage() {
                 <h3 className="font-semibold text-gray-900 truncate">{inv.title}</h3>
                 <p className="text-xs text-gray-400 mt-0.5 truncate">{inv.event_name}</p>
 
+                {/* Row 1: publish + view + delete */}
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm" variant="outline"
@@ -622,6 +819,61 @@ export default function InvitationsPage() {
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
+
+                {/* Row 2: copy link + whatsapp + pdf (only when published) */}
+                {inv.status === 'published' && (
+                  <div className="mt-2 flex gap-2">
+                    {/* Copy link */}
+                    <Button
+                      size="sm" variant="outline"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={() => { copyLink(inv); toast({ title: '¡Link copiado!', description: 'Pégalo donde quieras compartirlo.' }); }}
+                    >
+                      {copiedId === inv.id
+                        ? <><Check className="w-3.5 h-3.5 text-green-500" /> Copiado</>
+                        : <><Copy className="w-3.5 h-3.5" /> Copiar link</>}
+                    </Button>
+
+                    {/* WhatsApp share */}
+                    <Button
+                      size="sm" variant="outline"
+                      className="gap-1.5 text-xs text-green-600 border-green-200 hover:bg-green-50 px-2.5"
+                      onClick={() => shareWhatsApp(inv)}
+                      title="Compartir por WhatsApp"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                    </Button>
+
+                    {/* PDF download */}
+                    <Button
+                      size="sm" variant="outline"
+                      className="gap-1.5 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 px-2.5"
+                      onClick={() => handleDownloadPdf(inv)}
+                      disabled={generatingPdf === inv.id}
+                      title="Descargar PDF"
+                    >
+                      {generatingPdf === inv.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Download className="w-3.5 h-3.5" />}
+                    </Button>
+                  </div>
+                )}
+
+                {/* PDF for drafts too */}
+                {inv.status !== 'published' && (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      size="sm" variant="outline"
+                      className="flex-1 gap-1.5 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => handleDownloadPdf(inv)}
+                      disabled={generatingPdf === inv.id}
+                    >
+                      {generatingPdf === inv.id
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generando...</>
+                        : <><Download className="w-3.5 h-3.5" /> Descargar PDF</>}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -633,6 +885,11 @@ export default function InvitationsPage() {
         <InvitationPreviewModal
           invitation={previewInv}
           onClose={() => setPreviewInv(null)}
+          onCopyLink={(inv) => { copyLink(inv); toast({ title: '¡Link copiado!' }); }}
+          copiedId={copiedId}
+          onShareWhatsApp={shareWhatsApp}
+          onDownloadPdf={handleDownloadPdf}
+          generatingPdf={generatingPdf}
         />
       )}
     </div>

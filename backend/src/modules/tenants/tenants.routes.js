@@ -18,5 +18,7 @@ router.delete('/:id', authorize('manage_tenants'),                             T
 router.patch('/:id/suspend',  authorize('manage_tenants'),                     TenantsController.suspend);
 router.patch('/:id/activate', authorize('manage_tenants'),                     TenantsController.activate);
 router.get('/:id/stats',      authorize('manage_tenants'),                     TenantsController.getStats);
+router.patch('/:id/verify-owner-email',   authorize('manage_tenants'),             TenantsController.verifyOwnerEmail);
+router.post('/:id/resend-owner-verification', authorize('manage_tenants'),         TenantsController.resendOwnerVerification);
 
 module.exports = router;

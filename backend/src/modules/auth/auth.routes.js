@@ -2,7 +2,7 @@ const { Router } = require('express');
 const AuthController = require('./auth.controller');
 const validate = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/authenticate');
-const { loginSchema, registerSchema, refreshSchema, logoutSchema } = require('./auth.validation');
+const { loginSchema, registerSchema, refreshSchema, logoutSchema, changePasswordSchema } = require('./auth.validation');
 const rateLimit = require('express-rate-limit');
 const config = require('../../config');
 
@@ -22,6 +22,7 @@ router.post('/refresh',  validate(refreshSchema),               AuthController.r
 router.post('/logout',   validate(logoutSchema),                AuthController.logout);
 router.post('/logout-all', authenticate,                        AuthController.logoutAll);
 router.get('/me',        authenticate,                          AuthController.me);
+router.post('/change-password', authenticate, validate(changePasswordSchema), AuthController.changePassword);
 
 router.post('/2fa/verify-login', AuthController.verifyLogin2FA);
 router.get('/2fa/status',        authenticate, AuthController.get2FAStatus);
@@ -32,5 +33,9 @@ router.post('/2fa/disable',      authenticate, AuthController.disable2FA);
 // Email verification routes
 router.post('/verify-email',     AuthController.verifyEmail);
 router.post('/resend-verification', AuthController.resendVerification);
+
+// Onboarding tour
+router.post('/onboarding/complete', authenticate, AuthController.completeOnboarding);
+router.post('/onboarding/reset',    authenticate, AuthController.resetOnboarding);
 
 module.exports = router;

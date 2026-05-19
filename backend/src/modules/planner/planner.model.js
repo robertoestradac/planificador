@@ -258,18 +258,18 @@ const PlannerModel = {
     return rows;
   },
 
-  async createBudgetItem(planId, { category, name, estimated_cost, actual_cost, payment_status, notes }) {
+  async createBudgetItem(planId, { category, name, estimated_cost, actual_cost, advance_amount, payment_status, notes }) {
     const id = uuidv4();
     await pool.query(
-      'INSERT INTO plan_budget_items (id, plan_id, category, name, estimated_cost, actual_cost, payment_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, planId, category || 'Otros', name, estimated_cost || 0, actual_cost ?? null, payment_status || 'pendiente', notes || null]
+      'INSERT INTO plan_budget_items (id, plan_id, category, name, estimated_cost, actual_cost, advance_amount, payment_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, planId, category || 'Otros', name, estimated_cost || 0, actual_cost ?? null, advance_amount ?? null, payment_status || 'pendiente', notes || null]
     );
     const [rows] = await pool.query('SELECT * FROM plan_budget_items WHERE id = ?', [id]);
     return rows[0];
   },
 
   async updateBudgetItem(id, planId, fields) {
-    const allowed = ['category', 'name', 'estimated_cost', 'actual_cost', 'payment_status', 'notes'];
+    const allowed = ['category', 'name', 'estimated_cost', 'actual_cost', 'advance_amount', 'payment_status', 'notes'];
     const updates = [];
     const values = [];
     for (const key of allowed) {

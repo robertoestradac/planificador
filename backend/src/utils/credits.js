@@ -1,57 +1,76 @@
 const { pool } = require('../database/connection');
 
 /**
- * Returns tenant credits based on active subscription or confirmed payments.
- * Priority: 1. Active subscription, 2. Confirmed payments
- * NULL means unlimited (any plan in the stack had null for that field).
- * 
+ * Returns tenant credits based on the SUM of all confirmed payments.
+ * If no payments exist, falls back to the active subscription.
+ * If neither exists, falls back to the free plan.
+ *
+ * NULL means unlimited.
+ *
  * IMPORTANT: Invitations are tied to events (1 event = 1 invitation max).
  * The invitation limit is the same as the event limit.
  */
 async function getTenantCredits(tenantId) {
-  // First, try to get limits from active subscription
-  const [[sub]] = await pool.query(
-    `SELECT p.max_events, p.max_guests, p.max_users
-     FROM subscriptions s
-     JOIN plans p ON p.id = s.plan_id
-     WHERE s.tenant_id = ? AND s.status = 'active' AND s.expires_at > NOW()
-     ORDER BY s.expires_at DESC LIMIT 1`,
+  // 1. Sum from ALL confirmed payments
+  const [[paymentsRow]] = await pool.query(
+    `SELECT
+       CASE WHEN SUM(CASE WHEN p.max_events IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
+            ELSE COALESCE(SUM(p.max_events), 0) END AS total_events,
+       CASE WHEN SUM(CASE WHEN p.max_guests IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
+            ELSE COALESCE(SUM(p.max_guests), 0) END AS total_guests,
+       CASE WHEN SUM(CASE WHEN p.max_users IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
+            ELSE COALESCE(SUM(p.max_users), 0) END AS total_users,
+       COUNT(*) AS payment_count
+     FROM payments pm
+     JOIN plans p ON p.id = pm.plan_id
+     WHERE pm.tenant_id = ? AND pm.status = 'confirmed'`,
     [tenantId]
   );
 
-  let total_events = 0;
-  let total_guests = 0;
-  let total_users = 0;
+  const hasPayments = (paymentsRow?.payment_count || 0) > 0;
 
-  if (sub) {
-    // Use subscription limits
-    total_events = sub.max_events;
-    total_guests = sub.max_guests;
-    total_users = sub.max_users;
+  let total_events, total_guests, total_users;
+
+  if (hasPayments) {
+    // Payments are the source of truth for credits.
+    // Parse to Number to avoid string concatenation bugs from MySQL.
+    total_events = paymentsRow.total_events === null ? null : Number(paymentsRow.total_events);
+    total_guests = paymentsRow.total_guests === null ? null : Number(paymentsRow.total_guests);
+    total_users  = paymentsRow.total_users === null ? null : Number(paymentsRow.total_users);
   } else {
-    // Fallback: sum from confirmed payments (for one-time purchases)
-    const [[row]] = await pool.query(
-      `SELECT
-         CASE WHEN SUM(CASE WHEN p.max_events IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
-              ELSE COALESCE(SUM(p.max_events), 0) END AS total_events,
-         CASE WHEN SUM(CASE WHEN p.max_guests IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
-              ELSE COALESCE(SUM(p.max_guests), 0) END AS total_guests,
-         CASE WHEN SUM(CASE WHEN p.max_users IS NULL THEN 1 ELSE 0 END) > 0 THEN NULL
-              ELSE COALESCE(SUM(p.max_users), 0) END AS total_users
-       FROM payments pm
-       JOIN plans p ON p.id = pm.plan_id
-       WHERE pm.tenant_id = ? AND pm.status = 'confirmed'`,
+    // 2. Fallback: active subscription (for tenants that were assigned a plan
+    //    before the payment-based system, or registered with a free plan)
+    const [[sub]] = await pool.query(
+      `SELECT p.max_events, p.max_guests, p.max_users
+       FROM subscriptions s
+       JOIN plans p ON p.id = s.plan_id
+       WHERE s.tenant_id = ? AND s.status = 'active' AND s.expires_at > NOW()
+       ORDER BY s.expires_at DESC LIMIT 1`,
       [tenantId]
     );
 
-    if (row) {
-      total_events = row.total_events;
-      total_guests = row.total_guests;
-      total_users = row.total_users;
+    if (sub) {
+      total_events = sub.max_events === null ? null : Number(sub.max_events);
+      total_guests = sub.max_guests === null ? null : Number(sub.max_guests);
+      total_users  = sub.max_users === null ? null : Number(sub.max_users);
+    } else {
+      // 3. Fallback: free plan
+      const [[freePlan]] = await pool.query(
+        'SELECT max_events, max_guests, max_users FROM plans WHERE price_usd = 0 AND is_active = 1 LIMIT 1'
+      );
+      if (freePlan) {
+        total_events = freePlan.max_events === null ? null : Number(freePlan.max_events);
+        total_guests = freePlan.max_guests === null ? null : Number(freePlan.max_guests);
+        total_users  = freePlan.max_users === null ? null : Number(freePlan.max_users);
+      } else {
+        total_events = 0;
+        total_guests = 0;
+        total_users = 0;
+      }
     }
   }
 
-  // Get current usage
+  // 4. Get current usage
   const [[used]] = await pool.query(
     `SELECT
        (SELECT COUNT(*) FROM events WHERE tenant_id = ? AND deleted_at IS NULL) AS events_used,
@@ -97,11 +116,11 @@ async function assertCredit(tenantId, resourceType) {
   const AppError = require('./AppError');
   const credits = await getTenantCredits(tenantId);
   const c = credits[resourceType];
-  if (!c) throw new AppError(`Tipo de recurso inválido: ${resourceType}`, 400);
+  if (!c) throw new AppError('Tipo de recurso invalido: ' + resourceType, 400);
   if (c.available === null) return; // unlimited
   if (c.available <= 0) {
     throw new AppError(
-      `Límite alcanzado. Tienes ${c.used} de ${c.total} ${resourceType} usados. Adquiere un nuevo plan para continuar.`,
+      'Limite alcanzado. Tienes ' + c.used + ' de ' + c.total + ' ' + resourceType + ' usados. Adquiere un nuevo plan para continuar.',
       403
     );
   }

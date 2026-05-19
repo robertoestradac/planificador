@@ -110,6 +110,32 @@ const AuthController = {
       return success(res, result, result.message);
     } catch (err) { next(err); }
   },
+
+  async changePassword(req, res, next) {
+    try {
+      const { current_password, new_password } = req.body;
+      const result = await AuthService.changePassword(req.user.id, current_password, new_password);
+      return success(res, result, 'Contraseña actualizada. Vuelve a iniciar sesión.');
+    } catch (err) { next(err); }
+  },
+
+  // ============================================================
+  // ONBOARDING TOUR
+  // ============================================================
+
+  async completeOnboarding(req, res, next) {
+    try {
+      const result = await AuthService.setOnboardingCompleted(req.user.id, true);
+      return success(res, result, 'Onboarding completado');
+    } catch (err) { next(err); }
+  },
+
+  async resetOnboarding(req, res, next) {
+    try {
+      const result = await AuthService.setOnboardingCompleted(req.user.id, false);
+      return success(res, result, 'Tour reactivado');
+    } catch (err) { next(err); }
+  },
 };
 
 module.exports = AuthController;

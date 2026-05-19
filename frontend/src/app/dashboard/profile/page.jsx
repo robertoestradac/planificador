@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Loader2, Save, KeyRound, User } from 'lucide-react';
+import { Loader2, Save, KeyRound, User, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +8,14 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import useAuthStore from '@/store/authStore';
 import api from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import { useRestartTour } from '@/components/tour/OnboardingTour';
 
 export default function ProfilePage() {
   const user      = useAuthStore((s) => s.user);
   const fetchMe   = useAuthStore((s) => s.fetchMe);
+  const router    = useRouter();
+  const restartTour = useRestartTour();
 
   const [profile, setProfile]   = useState({ name: '', email: '' });
   const [savingProfile, setSavingProfile] = useState(false);
@@ -56,6 +60,16 @@ export default function ProfilePage() {
   };
 
   const toggle = (field) => setShowPwd((v) => ({ ...v, [field]: !v[field] }));
+
+  const handleRestartTour = async () => {
+    // Navegar al dashboard primero (paso 1 del tour) y luego arrancar
+    router.push('/dashboard');
+    // Pequeño delay para que la página monte antes de iniciar
+    setTimeout(() => {
+      restartTour();
+    }, 400);
+    toast({ title: 'Iniciando tutorial', description: 'Te llevamos al inicio del recorrido' });
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -149,6 +163,29 @@ export default function ProfilePage() {
               {savingPwd ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Actualizando...</> : <><KeyRound className="w-4 h-4 mr-2" />Cambiar contraseña</>}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Tour / onboarding */}
+      <Card className="border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-600" /> Tutorial de bienvenida
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-600 mb-3">
+            ¿Quieres repasar cómo crear tu primera invitación? Reactiva el tour guiado.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="bg-white hover:bg-violet-50 border-violet-300 text-violet-700"
+            onClick={handleRestartTour}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Ver tutorial otra vez
+          </Button>
         </CardContent>
       </Card>
     </div>

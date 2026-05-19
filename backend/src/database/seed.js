@@ -1,6 +1,7 @@
 require('dotenv').config();
 const mysql  = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 
@@ -345,39 +346,101 @@ async function seed() {
     console.log('Plans seeded.');
 
     // ── 5. SuperAdmin user ────────────────────────────────────
-    const superAdminId   = uuidv4();
-    const superAdminHash = await bcrypt.hash('roberto@140682', 12);
-    await conn.query(
-      `INSERT IGNORE INTO users (id, tenant_id, role_id, name, email, password_hash, status)
-       VALUES (?, NULL, ?, 'Super Admin', 'roberto.estrada.c@gmail.com', ?, 'active')`,
-      [superAdminId, superAdminRoleId, superAdminHash]
-    );
-    //console.log('SuperAdmin seeded — superadmin@invitaciones.app / Admin@1234!');
+    // Credenciales SOLO desde variables de entorno. Si no hay password
+    // configurada, generamos una temporal aleatoria, se imprime UNA VEZ
+    // en consola y el usuario queda obligado a cambiarla en el primer login.
+    const superAdminEmail = process.env.SEED_SUPERADMIN_EMAIL;
+    const superAdminName  = process.env.SEED_SUPERADMIN_NAME || 'Super Admin';
 
-    // ── 6. Demo tenant (Pro plan) ─────────────────────────────
-    const demoTenantId = uuidv4();
-    await conn.query(
-      `INSERT IGNORE INTO tenants (id, name, subdomain, status) VALUES (?, 'Demo Company', 'demo', 'active')`,
-      [demoTenantId]
-    );
+    if (!superAdminEmail) {
+      console.log('⏭️  Skipping SuperAdmin seed: SEED_SUPERADMIN_EMAIL not set.');
+    } else {
+      const [[existingSA]] = await conn.query(
+        'SELECT id FROM users WHERE email = ? AND tenant_id IS NULL LIMIT 1',
+        [superAdminEmail]
+      );
+      if (existingSA) {
+        console.log(`⏭️  SuperAdmin already exists for ${superAdminEmail} — skipping.`);
+      } else {
+        let saPassword = process.env.SEED_SUPERADMIN_PASSWORD;
+        let generated = false;
+        if (!saPassword) {
+          saPassword = crypto.randomBytes(18).toString('base64url'); // ~24 chars
+          generated = true;
+        }
+        const superAdminId   = uuidv4();
+        const superAdminHash = await bcrypt.hash(saPassword, 12);
+        await conn.query(
+          `INSERT INTO users (id, tenant_id, role_id, name, email, password_hash,
+                              email_verified, must_change_password, status)
+           VALUES (?, NULL, ?, ?, ?, ?, 1, 1, 'active')`,
+          [superAdminId, superAdminRoleId, superAdminName, superAdminEmail, superAdminHash]
+        );
+        console.log('✅ SuperAdmin created:');
+        console.log(`   email:    ${superAdminEmail}`);
+        if (generated) {
+          console.log(`   password: ${saPassword}   ← TEMPORARY, must be changed on first login`);
+        } else {
+          console.log('   password: <set from SEED_SUPERADMIN_PASSWORD env>');
+        }
+        console.log('   ⚠️  must_change_password = 1');
+      }
+    }
 
-    const demoOwnerId = uuidv4();
-    const demoHash    = await bcrypt.hash('MAjo@2026@', 12);
-    await conn.query(
-      `INSERT IGNORE INTO users (id, tenant_id, role_id, name, email, password_hash, status)
-       VALUES (?, ?, ?, 'Maria Jose', 'majocrm1@gmail.com', ?, 'active')`,
-      [demoOwnerId, demoTenantId, ownerRoleId, demoHash]
-    );
-
-    const now = new Date();
-    const expires = new Date(now);
-    expires.setFullYear(expires.getFullYear() + 1);
-    await conn.query(
-      `INSERT IGNORE INTO subscriptions (id, tenant_id, plan_id, starts_at, expires_at, status)
-       VALUES (?, ?, ?, ?, ?, 'active')`,
-      [uuidv4(), demoTenantId, proPlanId, now, expires]
-    );
-    //console.log('Demo tenant seeded — owner@demo.com / Demo@1234! (Pro plan)');
+    // ── 6. Demo tenant ────────────────────────────────────────
+    // Solo se crea si SEED_DEMO_TENANT=true. Útil para entornos de dev/staging,
+    // NUNCA debe correrse en producción real.
+    if (process.env.SEED_DEMO_TENANT === 'true') {
+      const demoEmail = process.env.SEED_DEMO_OWNER_EMAIL;
+      if (!demoEmail) {
+        console.log('⏭️  Skipping demo tenant: SEED_DEMO_OWNER_EMAIL not set.');
+      } else {
+        const [[existingDemo]] = await conn.query(
+          'SELECT id FROM tenants WHERE subdomain = ? LIMIT 1', ['demo']
+        );
+        if (existingDemo) {
+          console.log('⏭️  Demo tenant already exists — skipping.');
+        } else {
+          const demoOwnerName = process.env.SEED_DEMO_OWNER_NAME || 'Demo Owner';
+          let demoPassword = process.env.SEED_DEMO_OWNER_PASSWORD;
+          let generated = false;
+          if (!demoPassword) {
+            demoPassword = crypto.randomBytes(18).toString('base64url');
+            generated = true;
+          }
+          const demoTenantId = uuidv4();
+          await conn.query(
+            `INSERT INTO tenants (id, name, subdomain, status) VALUES (?, ?, 'demo', 'active')`,
+            [demoTenantId, process.env.SEED_DEMO_COMPANY_NAME || 'Demo Company']
+          );
+          const demoOwnerId = uuidv4();
+          const demoHash    = await bcrypt.hash(demoPassword, 12);
+          await conn.query(
+            `INSERT INTO users (id, tenant_id, role_id, name, email, password_hash,
+                                email_verified, must_change_password, status)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'active')`,
+            [demoOwnerId, demoTenantId, ownerRoleId, demoOwnerName, demoEmail, demoHash]
+          );
+          const now = new Date();
+          const expires = new Date(now);
+          expires.setFullYear(expires.getFullYear() + 1);
+          await conn.query(
+            `INSERT INTO subscriptions (id, tenant_id, plan_id, starts_at, expires_at, status)
+             VALUES (?, ?, ?, ?, ?, 'active')`,
+            [uuidv4(), demoTenantId, proPlanId, now, expires]
+          );
+          console.log('✅ Demo tenant created:');
+          console.log(`   email:    ${demoEmail}`);
+          if (generated) {
+            console.log(`   password: ${demoPassword}   ← TEMPORARY, must be changed on first login`);
+          } else {
+            console.log('   password: <set from SEED_DEMO_OWNER_PASSWORD env>');
+          }
+        }
+      }
+    } else {
+      console.log('⏭️  Skipping demo tenant (SEED_DEMO_TENANT != true).');
+    }
 
     console.log('\nSeed completed successfully!');
   } catch (err) {

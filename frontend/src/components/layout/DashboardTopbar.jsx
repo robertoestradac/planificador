@@ -1,14 +1,18 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { LogOut, User, ChevronDown, Menu } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { LogOut, User, ChevronDown, Menu, Sparkles } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
+import { useRestartTour } from '@/components/tour/OnboardingTour';
+import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 export default function DashboardTopbar({ onMenuClick }) {
-  const router = useRouter();
-  const user   = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const router   = useRouter();
+  const pathname = usePathname();
+  const user     = useAuthStore((s) => s.user);
+  const logout   = useAuthStore((s) => s.logout);
+  const restartTour = useRestartTour();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -24,6 +28,19 @@ export default function DashboardTopbar({ onMenuClick }) {
     dataCache.clear();
     await logout();
     router.push('/login');
+  };
+
+  const handleStartTour = async () => {
+    setOpen(false);
+    // Si no estamos en /dashboard, navegar primero (paso 1 del tour)
+    if (pathname !== '/dashboard') {
+      router.push('/dashboard');
+      // Esperar a que la nueva ruta monte
+      setTimeout(() => restartTour(), 500);
+    } else {
+      restartTour();
+    }
+    toast({ title: 'Iniciando tutorial', description: 'Te guiaremos paso a paso' });
   };
 
   return (
@@ -55,7 +72,7 @@ export default function DashboardTopbar({ onMenuClick }) {
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+          <div className="absolute right-0 mt-1 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
             <Link
               href="/dashboard/profile"
               onClick={() => setOpen(false)}
@@ -64,6 +81,18 @@ export default function DashboardTopbar({ onMenuClick }) {
               <User className="w-4 h-4 text-gray-400" />
               Mi perfil
             </Link>
+
+            {/* Tour: sólo para usuarios tenant */}
+            {user?.tenant_id && (
+              <button
+                onClick={handleStartTour}
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-violet-700 hover:bg-violet-50 transition-colors w-full text-left"
+              >
+                <Sparkles className="w-4 h-4 text-violet-500" />
+                Ver tutorial
+              </button>
+            )}
+
             <div className="border-t border-gray-100 my-1" />
             <button
               onClick={handleLogout}

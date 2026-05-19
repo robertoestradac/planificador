@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Calendar, MapPin, Pencil, Trash2, ChevronRight } from 'lucide-react';
 import NoPlanBanner from '@/components/ui/no-plan-banner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +14,7 @@ import { formatDateTime } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
-const emptyForm = { name: '', date: '', location: '', map_url: '' };
+const emptyForm = { name: '', date: '', time: '18:00', location: '', map_url: '' };
 
 export default function EventsPage() {
   const [events, setEvents] = useState([]);
@@ -23,6 +24,8 @@ export default function EventsPage() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [limitAlert, setLimitAlert] = useState(false);
+  const [creditInfo, setCreditInfo] = useState(null);
 
   const fetchEvents = async () => {
     try {
@@ -36,33 +39,65 @@ export default function EventsPage() {
 
   useEffect(() => { fetchEvents(); }, []);
 
+  // Verificar creditos antes de abrir el formulario de nuevo evento
+  const handleNewEvent = async () => {
+    try {
+      const { data } = await api.get('/payments/my/credits');
+      const credits = data.data;
+      if (credits && credits.events.available !== null && credits.events.available <= 0) {
+        setCreditInfo(credits.events);
+        setLimitAlert(true);
+        return;
+      }
+    } catch {
+      // Si falla la verificacion, dejamos que el backend valide al crear
+    }
+    setShowForm(true);
+    setEditId(null);
+    setForm(emptyForm);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
+      // Combinar fecha + hora en un solo datetime string para el backend
+      const datetime = form.date && form.time ? `${form.date}T${form.time}` : form.date;
+      const payload = { name: form.name, date: datetime, location: form.location, map_url: form.map_url };
+
       if (editId) {
-        const { data } = await api.put(`/events/${editId}`, form);
+        const { data } = await api.put(`/events/${editId}`, payload);
         toast({ title: 'Evento actualizado' });
-        // Actualiza solo el evento modificado en el estado local
         setEvents(prev => prev.map(ev => ev.id === editId ? data.data : ev));
       } else {
-        const { data } = await api.post('/events', form);
+        const { data } = await api.post('/events', payload);
         toast({ title: 'Evento creado' });
-        // Agrega el nuevo evento al inicio del estado local
         setEvents(prev => [data.data, ...prev]);
       }
       setShowForm(false);
       setForm(emptyForm);
       setEditId(null);
     } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+      const msg = err.response?.data?.message || 'Error al crear evento';
+      const isLimitError = err.response?.status === 403 && msg.includes('Limite');
+      toast({
+        variant: 'destructive',
+        title: isLimitError ? 'Limite de plan alcanzado' : 'Error',
+        description: isLimitError
+          ? msg + ' Ve a Mi Plan para adquirir mas creditos.'
+          : msg,
+      });
     } finally { setSaving(false); }
   };
 
   const handleEdit = (event) => {
+    // Separar datetime del servidor en date y time
+    const dateStr = event.date ? event.date.slice(0, 10) : '';
+    const timeStr = event.date ? event.date.slice(11, 16) : '18:00';
     setForm({
       name: event.name,
-      date: event.date?.slice(0, 16),
+      date: dateStr,
+      time: timeStr || '18:00',
       location: event.location || '',
       map_url: event.map_url || '',
     });
@@ -91,7 +126,7 @@ export default function EventsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Eventos</h1>
           <p className="text-gray-500 mt-1">Gestiona tus eventos</p>
         </div>
-        <Button onClick={() => { setShowForm(!showForm); setEditId(null); setForm(emptyForm); }}>
+        <Button data-tour="create-event-btn" onClick={handleNewEvent}>
           <Plus className="w-4 h-4 mr-2" /> Nuevo Evento
         </Button>
       </div>
@@ -103,22 +138,26 @@ export default function EventsPage() {
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <Label>Nombre del evento</Label>
-                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Boda de Ana y Carlos" />
+                <Input data-tour="event-name-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Boda de Ana y Carlos" />
               </div>
               <div>
-                <Label>Fecha y hora</Label>
-                <Input type="datetime-local" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+                <Label>Fecha</Label>
+                <Input data-tour="event-date-input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+              </div>
+              <div>
+                <Label>Hora</Label>
+                <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required />
               </div>
               <div>
                 <Label>Ubicación</Label>
-                <Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Salón de eventos XYZ" />
+                <Input data-tour="event-location-input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Salón de eventos XYZ" />
               </div>
               <div className="md:col-span-2">
                 <Label>URL del mapa (opcional)</Label>
                 <Input value={form.map_url} onChange={e => setForm({ ...form, map_url: e.target.value })} placeholder="https://maps.google.com/..." />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <Button type="submit" disabled={saving}>{saving ? 'Guardando...' : editId ? 'Actualizar' : 'Crear'}</Button>
+                <Button data-tour="event-submit-btn" type="submit" disabled={saving}>{saving ? 'Guardando...' : editId ? 'Actualizar' : 'Crear'}</Button>
                 <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditId(null); }}>Cancelar</Button>
               </div>
             </form>
@@ -177,6 +216,22 @@ export default function EventsPage() {
           ))}
         </div>
       )}
+
+      {/* Alert de limite de creditos */}
+      <ConfirmDialog
+        open={limitAlert}
+        onOpenChange={setLimitAlert}
+        variant="warning"
+        title="Limite de eventos alcanzado"
+        message={
+          creditInfo
+            ? `Has usado ${creditInfo.used} de ${creditInfo.total} eventos disponibles en tu plan. Para crear mas eventos, adquiere un nuevo plan desde "Mi Plan".`
+            : 'No tienes eventos disponibles en tu plan actual.'
+        }
+        confirmText="Ir a Mi Plan"
+        cancelText="Cerrar"
+        onConfirm={() => { window.location.href = '/dashboard/subscription'; }}
+      />
     </div>
   );
 }

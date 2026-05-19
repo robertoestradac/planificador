@@ -20,13 +20,17 @@ const SubscriptionsService = {
     const sub = await SubscriptionsModel.findActiveByTenant(tenantId);
     if (!sub) throw new AppError('No active subscription found', 404);
 
-    const usage = await SubscriptionsModel.getLimitsUsage(tenantId);
+    // Use the centralized credits utility which sums all confirmed payments
+    // + active subscription to support stacking (buying same plan multiple times)
+    const { getTenantCredits } = require('../../utils/credits');
+    const credits = await getTenantCredits(tenantId);
+
     return {
       ...sub,
       usage: {
-        events: { used: usage.events_used, max: sub.max_events },
-        users:  { used: usage.users_used,  max: sub.max_users },
-        guests: { used: usage.guests_used, max: sub.max_guests },
+        events: { used: credits.events.used, max: credits.events.total },
+        users:  { used: credits.users.used,  max: credits.users.total },
+        guests: { used: credits.guests.used, max: credits.guests.total },
       },
     };
   },
@@ -63,13 +67,17 @@ const SubscriptionsService = {
   async getLimitsUsage(tenantId) {
     const sub = await SubscriptionsModel.findActiveByTenant(tenantId);
     if (!sub) throw new AppError('No active subscription', 404);
-    const usage = await SubscriptionsModel.getLimitsUsage(tenantId);
+
+    // Use centralized credits (supports stacking)
+    const { getTenantCredits } = require('../../utils/credits');
+    const credits = await getTenantCredits(tenantId);
+
     return {
-      plan: { name: sub.plan_name, max_events: sub.max_events, max_guests: sub.max_guests, max_users: sub.max_users },
+      plan: { name: sub.plan_name, max_events: credits.events.total, max_guests: credits.guests.total, max_users: credits.users.total },
       usage: {
-        events: { used: usage.events_used, max: sub.max_events, exceeded: sub.max_events !== null && usage.events_used >= sub.max_events },
-        users:  { used: usage.users_used,  max: sub.max_users,  exceeded: sub.max_users  !== null && usage.users_used  >= sub.max_users  },
-        guests: { used: usage.guests_used, max: sub.max_guests, exceeded: sub.max_guests !== null && usage.guests_used >= sub.max_guests },
+        events: { used: credits.events.used, max: credits.events.total, exceeded: credits.events.total !== null && credits.events.used >= credits.events.total },
+        users:  { used: credits.users.used,  max: credits.users.total,  exceeded: credits.users.total  !== null && credits.users.used  >= credits.users.total  },
+        guests: { used: credits.guests.used, max: credits.guests.total, exceeded: credits.guests.total !== null && credits.guests.used >= credits.guests.total },
       },
     };
   },

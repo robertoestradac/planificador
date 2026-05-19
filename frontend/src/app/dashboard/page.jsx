@@ -181,8 +181,32 @@ export default function ClientDashboard() {
                 used={subscription.usage?.users?.used || 0}
                 max={subscription.usage?.users?.max}
               />
+
+              {/* Warning when events or invitations are exhausted */}
+              {subscription.usage?.events?.max !== null &&
+               subscription.usage?.events?.used >= subscription.usage?.events?.max && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                  <p className="font-semibold">Has usado todos tus eventos disponibles.</p>
+                  <p className="mt-0.5">Adquiere el mismo plan u otro para obtener más créditos.</p>
+                </div>
+              )}
+
               <Link href="/dashboard/subscription">
-                <Button variant="outline" size="sm" className="w-full mt-2">Gestionar plan</Button>
+                <Button
+                  variant={
+                    subscription.usage?.events?.max !== null &&
+                    subscription.usage?.events?.used >= subscription.usage?.events?.max
+                      ? 'default'
+                      : 'outline'
+                  }
+                  size="sm"
+                  className="w-full mt-2"
+                >
+                  {subscription.usage?.events?.max !== null &&
+                   subscription.usage?.events?.used >= subscription.usage?.events?.max
+                    ? 'Adquirir más créditos'
+                    : 'Gestionar plan'}
+                </Button>
               </Link>
             </CardContent>
           </Card>

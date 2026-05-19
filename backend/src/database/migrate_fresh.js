@@ -17,6 +17,13 @@ async function fresh() {
     process.exit(1);
   }
 
+  // Hard guard for production
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_FRESH_IN_PRODUCTION !== 'true') {
+    console.error('🛑 migrate:fresh is disabled in production.');
+    console.error('   To run it deliberately set ALLOW_FRESH_IN_PRODUCTION=true.');
+    process.exit(1);
+  }
+
   console.log('⚠️  WARNING: This will DELETE ALL DATA in the database!');
   console.log(`   Database: ${config.db.name}`);
   console.log(`   Environment: ${config.env}`);

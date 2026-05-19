@@ -1,10 +1,32 @@
 services:
+  # ── Docker Socket Proxy ──────────────────────────────────────
+  # Traefik no accede directamente al socket de Docker.
+  # Este proxy expone solo las APIs de lectura necesarias.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      SERVICES: 0
+      TASKS: 0
+      NETWORKS: 1
+      NODES: 0
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-proxy
+
   traefik:
     image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
     command:
       - --providers.docker=true
+      - --providers.docker.endpoint=tcp://docker-socket-proxy:2375
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
@@ -17,13 +39,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      - DOCKER_API_VERSION=1.43
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_letsencrypt:/letsencrypt
     networks:
       - web
+      - socket-proxy
 
   mysql:
     image: mysql:8.0
@@ -43,6 +63,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # ── MySQL Backup (daily at 03:00 UTC) ───────────────────────
+  mysql-backup:
+    image: databack/mysql-backup:latest
+    container_name: mysql-backup
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_SERVER: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: ${DB_ROOT_PASSWORD}
+      DB_NAMES: ${DB_NAME}
+      DB_DUMP_CRON: "0 3 * * *"
+      DB_DUMP_TARGET: /backup
+      DB_DUMP_SAFECHARS: "true"
+      COMPRESSION: gzip
+      DB_DUMP_KEEP_PERMISSIONS: "true"
+      # Retener últimos 14 días de backups
+      DB_DUMP_KEEP_DAYS: 14
+    volumes:
+      - mysql_backups:/backup
+    networks:
+      - internal
 
   backend:
     build:
@@ -65,11 +111,22 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRES: 15m
       JWT_REFRESH_EXPIRES: 7d
-      CORS_ORIGIN: https://planificador.app
+      CORS_ORIGIN: https://planificador.app,https://www.planificador.app
       APP_DOMAIN: planificador.app
       APP_PROTOCOL: https
+      FRONTEND_URL: https://planificador.app
       SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
       MIGRATION_MODE: ${MIGRATION_MODE:-normal}
+      ALLOW_FRESH_IN_PRODUCTION: ${ALLOW_FRESH_IN_PRODUCTION:-false}
+      ALLOW_SEED_IN_PRODUCTION: ${ALLOW_SEED_IN_PRODUCTION:-false}
+      SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-}
+      SEED_SUPERADMIN_NAME: ${SEED_SUPERADMIN_NAME:-}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-}
+      SEED_DEMO_TENANT: ${SEED_DEMO_TENANT:-false}
+      SEED_DEMO_OWNER_EMAIL: ${SEED_DEMO_OWNER_EMAIL:-}
+      SEED_DEMO_OWNER_NAME: ${SEED_DEMO_OWNER_NAME:-}
+      SEED_DEMO_OWNER_PASSWORD: ${SEED_DEMO_OWNER_PASSWORD:-}
+      SEED_DEMO_COMPANY_NAME: ${SEED_DEMO_COMPANY_NAME:-}
     volumes:
       - backend_uploads:/app/uploads
     networks:
@@ -115,6 +172,7 @@ services:
 
 volumes:
   mysql_data:
+  mysql_backups:
   backend_uploads:
   traefik_letsencrypt:
 
@@ -123,3 +181,6 @@ networks:
     name: web
   internal:
     name: internal
+  socket-proxy:
+    name: socket-proxy
+    internal: true

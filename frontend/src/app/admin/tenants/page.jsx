@@ -5,6 +5,7 @@ import {
   User, Mail, Lock, Globe, Eye, EyeOff, Loader2,
   MoreHorizontal, Pencil, Trash2, BarChart3, ChevronLeft, ChevronRight,
   CreditCard, Calendar, Users, FileText, ShieldOff, ShieldCheck,
+  BadgeCheck, Send,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,141 @@ const EMPTY_FORM = {
   plan_id: '',
 };
 const PAGE_SIZE = 10;
+
+/**
+ * PlanTab - Muestra creditos actuales, pagos confirmados (con opcion de quitar),
+ * y planes disponibles para agregar.
+ */
+function PlanTab({ tenant, plans, editForm, setEditForm, onRefreshStats }) {
+  const [credits, setCredits] = useState(null);
+  const [payments, setPayments] = useState([]);
+  const [loadingCredits, setLoadingCredits] = useState(true);
+  const [removing, setRemoving] = useState(null);
+
+  const fetchCredits = async () => {
+    try {
+      const [creditsRes, paymentsRes] = await Promise.all([
+        api.get(`/payments/tenant/${tenant.id}/credits`),
+        api.get(`/payments?tenant_id=${tenant.id}&status=confirmed&limit=50`),
+      ]);
+      setCredits(creditsRes.data.data);
+      setPayments(paymentsRes.data.data?.data || []);
+    } catch {} finally { setLoadingCredits(false); }
+  };
+
+  useEffect(() => { fetchCredits(); }, [tenant.id]);
+
+  const handleRemovePayment = async (paymentId) => {
+    if (!confirm('Esto quitara los creditos de este pago. Continuar?')) return;
+    setRemoving(paymentId);
+    try {
+      await api.patch(`/payments/${paymentId}/reject`);
+      toast({ title: 'Creditos removidos' });
+      fetchCredits();
+      if (onRefreshStats) onRefreshStats();
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+    } finally { setRemoving(null); }
+  };
+
+  if (loadingCredits) {
+    return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>;
+  }
+
+  return (
+    <>
+      {/* Creditos actuales */}
+      {credits && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Creditos actuales</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">
+                {credits.events.available === null ? 'Ilim.' : credits.events.available}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {credits.events.used}/{credits.events.total === null ? 'ilim' : credits.events.total} Eventos
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">
+                {credits.guests.available === null ? 'Ilim.' : credits.guests.available}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {credits.guests.used}/{credits.guests.total === null ? 'ilim' : credits.guests.total} Invitados
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-900">
+                {credits.users.available === null ? 'Ilim.' : credits.users.available}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {credits.users.used}/{credits.users.total === null ? 'ilim' : credits.users.total} Usuarios
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pagos confirmados (creditos activos) */}
+      {payments.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Planes asignados</p>
+          {payments.map(p => (
+            <div key={p.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{p.plan_name}</p>
+                <p className="text-[10px] text-gray-400">
+                  {formatDate(p.created_at)} - ${Number(p.amount).toFixed(2)} USD
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 text-xs h-7"
+                disabled={removing === p.id}
+                onClick={() => handleRemovePayment(p.id)}
+              >
+                {removing === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Quitar'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Agregar plan */}
+      <div className="space-y-2">
+        <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Agregar creditos</p>
+        <p className="text-[10px] text-gray-400">Selecciona un plan y guarda para sumar creditos</p>
+        {plans.map(plan => (
+          <div key={plan.id}
+            className={cn('flex items-center justify-between p-3 rounded-xl border-2 transition-all',
+              editForm.plan_id === plan.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200')}>
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">{plan.name}</p>
+              <p className="text-[10px] text-gray-500">
+                +{plan.max_events ?? 'ilim'} eventos, +{plan.max_guests ?? 'ilim'} invitados, +{plan.max_users ?? 'ilim'} usuarios
+              </p>
+              <p className="text-[10px] text-gray-400">
+                {plan.price_usd > 0 ? `$${plan.price_usd} USD` : 'Gratis'} - {plan.duration_months ?? 1} {(plan.duration_months ?? 1) === 1 ? 'mes' : 'meses'}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant={editForm.plan_id === plan.id ? 'default' : 'outline'}
+              className={cn('text-xs h-7', editForm.plan_id === plan.id ? 'bg-violet-600 hover:bg-violet-700 text-white' : '')}
+              onClick={() => setEditForm(f => ({ ...f, plan_id: f.plan_id === plan.id ? '' : plan.id }))}
+            >
+              {editForm.plan_id === plan.id ? 'Seleccionado' : 'Agregar'}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export default function TenantsPage() {
   /* ── list state ── */
@@ -53,6 +189,10 @@ export default function TenantsPage() {
   /* ── delete confirm ── */
   const [deleteTenant, setDeleteTenant] = useState(null);
   const [deleting, setDeleting]         = useState(false);
+
+  /* ── verify email ── */
+  const [verifyingEmail, setVerifyingEmail]   = useState(false);
+  const [resendingEmail, setResendingEmail]   = useState(false);
 
   /* ── action dropdown ── */
   const [openMenu, setOpenMenu] = useState(null);
@@ -171,6 +311,31 @@ export default function TenantsPage() {
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
     } finally { setDeleting(false); }
+  };
+
+  /* ─── verify owner email (admin manual) ─── */
+  const handleVerifyOwnerEmail = async () => {
+    setVerifyingEmail(true);
+    try {
+      await api.patch(`/tenants/${editTenant.id}/verify-owner-email`);
+      toast({ title: '✅ Email verificado', description: 'El owner ya puede iniciar sesión.' });
+      // Update local state so the UI reflects the change immediately
+      setEditTenant(t => ({ ...t, owner_email_verified: true }));
+      fetchTenants(page);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message || 'No se pudo verificar el email' });
+    } finally { setVerifyingEmail(false); }
+  };
+
+  /* ─── resend verification email ─── */
+  const handleResendVerification = async () => {
+    setResendingEmail(true);
+    try {
+      await api.post(`/tenants/${editTenant.id}/resend-owner-verification`);
+      toast({ title: '📧 Email enviado', description: 'Se reenvió el correo de verificación al owner.' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message || 'No se pudo reenviar el email' });
+    } finally { setResendingEmail(false); }
   };
 
   /* ─── derived ─── */
@@ -510,6 +675,59 @@ export default function TenantsPage() {
                         Este tenant no tiene un owner. Completa los 3 campos para crearlo.
                       </div>
                     )}
+
+                    {/* Email verification status block */}
+                    {editTenant.owner_email && (
+                      <div className={cn(
+                        'p-4 rounded-xl border flex flex-col gap-3',
+                        editTenant.owner_email_verified
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-amber-50 border-amber-200'
+                      )}>
+                        <div className="flex items-center gap-2">
+                          {editTenant.owner_email_verified ? (
+                            <BadgeCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className={cn('text-xs font-semibold', editTenant.owner_email_verified ? 'text-green-800' : 'text-amber-800')}>
+                              {editTenant.owner_email_verified ? 'Email verificado' : 'Email no verificado'}
+                            </p>
+                            <p className={cn('text-xs truncate', editTenant.owner_email_verified ? 'text-green-600' : 'text-amber-600')}>
+                              {editTenant.owner_email}
+                            </p>
+                          </div>
+                        </div>
+                        {!editTenant.owner_email_verified && (
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+                              disabled={resendingEmail}
+                              onClick={handleResendVerification}
+                            >
+                              {resendingEmail
+                                ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Enviando...</>
+                                : <><Send className="w-3 h-3 mr-1" />Reenviar email</>}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="flex-1 text-xs bg-green-600 hover:bg-green-700 text-white"
+                              disabled={verifyingEmail}
+                              onClick={handleVerifyOwnerEmail}
+                            >
+                              {verifyingEmail
+                                ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Verificando...</>
+                                : <><BadgeCheck className="w-3 h-3 mr-1" />Verificar manualmente</>}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       <Label>Nombre del owner</Label>
                       <div className="relative">
@@ -547,52 +765,13 @@ export default function TenantsPage() {
 
                 {/* ── PLAN TAB ── */}
                 {editTab === 'plan' && (
-                  <>
-                    {editTenant.plan_name && (
-                      <div className="p-3 bg-violet-50 border border-violet-200 rounded-xl flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-violet-600 flex-shrink-0" />
-                        <div>
-                          <p className="text-xs font-semibold text-violet-800">Plan actual: {editTenant.plan_name}</p>
-                          <p className="text-xs text-violet-600">Selecciona otro plan para cambiarlo</p>
-                        </div>
-                      </div>
-                    )}
-                    {plans.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">No hay planes activos configurados</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {plans.map(plan => (
-                          <label key={plan.id}
-                            className={cn('flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all',
-                              editForm.plan_id === plan.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200 hover:border-violet-200')}>
-                            <div className="flex items-center gap-3">
-                              <input type="radio" name="editplan" value={plan.id} checked={editForm.plan_id === plan.id}
-                                onChange={() => setEditForm(f => ({ ...f, plan_id: plan.id }))} className="accent-violet-600" />
-                              <div>
-                                <p className="font-semibold text-gray-900 text-sm">{plan.name}</p>
-                                <p className="text-xs text-gray-500">
-                                  {plan.max_events ? `${plan.max_events} eventos` : 'Ilimitados'} ·{' '}
-                                  {plan.max_guests ? `${plan.max_guests} invitados` : 'Ilimitados'}
-                                </p>
-                              </div>
-                            </div>
-                            <p className="font-bold text-sm text-gray-800">
-                              {plan.price_usd > 0 ? `$${plan.price_usd}/mes` : 'Gratis'}
-                            </p>
-                          </label>
-                        ))}
-                        <label className={cn('flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all',
-                          !editForm.plan_id ? 'border-gray-400 bg-gray-50' : 'border-gray-200 hover:border-gray-300')}>
-                          <input type="radio" name="editplan" value="" checked={!editForm.plan_id}
-                            onChange={() => setEditForm(f => ({ ...f, plan_id: '' }))} className="accent-violet-600" />
-                          <div>
-                            <p className="font-semibold text-gray-700 text-sm">No cambiar plan</p>
-                            <p className="text-xs text-gray-400">Mantener el plan actual</p>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-                  </>
+                  <PlanTab
+                    tenant={editTenant}
+                    plans={plans}
+                    editForm={editForm}
+                    setEditForm={setEditForm}
+                    onRefreshStats={() => fetchTenants(page)}
+                  />
                 )}
               </div>
 

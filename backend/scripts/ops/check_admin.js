@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 const bcrypt = require('bcryptjs');
 
 async function checkAdmin() {

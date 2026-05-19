@@ -1,4 +1,4 @@
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function checkPermissions() {
   try {

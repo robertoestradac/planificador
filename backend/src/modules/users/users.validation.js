@@ -4,7 +4,7 @@ const createUserSchema = Joi.object({
   name: Joi.string().min(2).max(255).required(),
   email: Joi.string().email().lowercase().trim().required(),
   password: Joi.string().min(8).required(),
-  role_id: Joi.string().uuid().required(),
+  role_id: Joi.string().uuid().optional().allow(null, ''),
   tenant_id: Joi.string().uuid().optional().allow(null, ''),
   status: Joi.string().valid('active', 'inactive').optional(),
 });

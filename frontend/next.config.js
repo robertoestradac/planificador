@@ -11,26 +11,42 @@ const nextConfig = {
   },
   
   // Optimización de imágenes
-  images: {
-    formats: ['image/webp'],
-    minimumCacheTTL: 60,
-    remotePatterns: [
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '8000',
-        pathname: '/uploads/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-      {
-        protocol: 'http',
-        hostname: '**',
-      },
-    ],
-  },
+  // remotePatterns es deliberadamente restrictivo. Para añadir hosts CDN
+  // (S3, Cloudinary, etc.) hay que listarlos explícitamente vía env y
+  // serializarlos en NEXT_PUBLIC_IMAGE_HOSTS="cdn.foo.com,bucket.bar.com".
+  images: (() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    let apiHostname = 'localhost';
+    let apiProtocol = 'http';
+    let apiPort = '';
+    try {
+      const u = new URL(apiUrl);
+      apiHostname = u.hostname;
+      apiProtocol = u.protocol.replace(':', '');
+      apiPort = u.port || '';
+    } catch {
+      /* fallback to defaults */
+    }
+
+    const extraHosts = (process.env.NEXT_PUBLIC_IMAGE_HOSTS || '')
+      .split(',').map(h => h.trim()).filter(Boolean);
+
+    return {
+      formats: ['image/webp'],
+      minimumCacheTTL: 60,
+      remotePatterns: [
+        // API que sirve /uploads/**
+        {
+          protocol: apiProtocol,
+          hostname: apiHostname,
+          port: apiPort,
+          pathname: '/uploads/**',
+        },
+        // Hosts adicionales (CDN propio) declarados explícitamente
+        ...extraHosts.map(host => ({ protocol: 'https', hostname: host })),
+      ],
+    };
+  })(),
   
   // Optimización de producción
   productionBrowserSourceMaps: false,

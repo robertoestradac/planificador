@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { CreditCard, CheckCircle, Clock, XCircle, Calendar, Users, FileText, Zap } from 'lucide-react';
+import { CreditCard, CheckCircle, Clock, XCircle, Calendar, Users, FileText, Zap, Gift } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatDate } from '@/lib/utils';
@@ -9,6 +9,12 @@ import api from '@/lib/api';
 const STATUS_LABEL   = { pending: 'Pendiente', confirmed: 'Confirmado', rejected: 'Rechazado' };
 const STATUS_VARIANT = { pending: 'warning', confirmed: 'success', rejected: 'destructive' };
 const STATUS_ICON    = { pending: Clock, confirmed: CheckCircle, rejected: XCircle };
+
+const METHOD_LABEL = {
+  bank_transfer:  'Depósito bancario',
+  payment_link:   'Link de pago',
+  admin_assigned: 'Asignado por admin',
+};
 
 export default function BillingPage() {
   const [credits, setCredits]   = useState(null);
@@ -103,25 +109,39 @@ export default function BillingPage() {
             </CardHeader>
             <CardContent>
               {payments.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No hay pagos registrados</p>
+                <p className="text-sm text-gray-400 text-center py-6">
+                  No hay pagos registrados.<br />
+                  <span className="text-xs">Si estás en el plan gratuito, no se generan registros.</span>
+                </p>
               ) : (
                 <div className="space-y-3">
                   {payments.map(p => {
                     const Icon = STATUS_ICON[p.status] || Clock;
+                    const isAssigned = p.source === 'subscription' || p.method === 'admin_assigned';
                     return (
                       <div key={p.id} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
                             p.status === 'confirmed' ? 'bg-green-100' : p.status === 'rejected' ? 'bg-red-100' : 'bg-amber-100')}>
-                            <Icon className={cn('w-4 h-4',
-                              p.status === 'confirmed' ? 'text-green-600' : p.status === 'rejected' ? 'text-red-500' : 'text-amber-600')} />
+                            {isAssigned
+                              ? <Gift className="w-4 h-4 text-violet-600" />
+                              : <Icon className={cn('w-4 h-4',
+                                  p.status === 'confirmed' ? 'text-green-600' : p.status === 'rejected' ? 'text-red-500' : 'text-amber-600')} />
+                            }
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900 text-sm">{p.plan_name}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-gray-900 text-sm">{p.plan_name}</p>
+                              {isAssigned && (
+                                <span className="text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 rounded-full px-2 py-0.5">
+                                  Asignado
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
                               <span>{formatDate(p.created_at)}</span>
                               {p.reference && <span className="font-mono">· Ref: {p.reference}</span>}
-                              <span>· {p.method === 'bank_transfer' ? 'Depósito' : 'Link'}</span>
+                              <span>· {METHOD_LABEL[p.method] || p.method}</span>
                             </div>
                             {p.status === 'confirmed' && (
                               <p className="text-xs text-gray-400 mt-0.5">

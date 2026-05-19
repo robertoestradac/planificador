@@ -4,7 +4,7 @@
  */
 
 require('dotenv').config();
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function getVerificationToken() {
   const email = process.argv[2];
@@ -76,7 +76,7 @@ async function getVerificationToken() {
       process.exit(1);
     }
 
-    const config = require('../config');
+    const config = require('../../src/config');
     const verificationUrl = `${config.app.frontendUrl}/verify-email?token=${user.email_verification_token}`;
 
     console.log('🔗 Link de verificación:\n');

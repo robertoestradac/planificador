@@ -319,7 +319,14 @@ const MarketingService = {
    */
   async sendTransactionalEmail({ to, subject, html, text }) {
     try {
-      const transporter = await this.getSmtpTransporter();
+      let transporter;
+      try {
+        transporter = await this.getSmtpTransporter();
+      } catch (configError) {
+        logger.warn('SMTP not configured, skipping email send:', configError.message);
+        return { success: false, skipped: true, reason: configError.message };
+      }
+
       const config = await MarketingModel.getSmtpConfig();
 
       const info = await transporter.sendMail({

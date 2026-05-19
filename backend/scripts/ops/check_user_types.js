@@ -4,7 +4,7 @@
  */
 
 require('dotenv').config();
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function checkUserTypes() {
   try {

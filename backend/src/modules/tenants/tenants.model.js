@@ -37,11 +37,12 @@ const TenantsModel = {
         t.id, t.name, t.subdomain, t.custom_domain, t.status, t.created_at,
         owner.name  AS owner_name,
         owner.email AS owner_email,
+        owner.email_verified AS owner_email_verified,
         p.name      AS plan_name,
         p.price_usd AS plan_price
       FROM tenants t
       LEFT JOIN (
-        SELECT u.tenant_id, u.name, u.email
+        SELECT u.tenant_id, u.name, u.email, u.email_verified
         FROM users u
         JOIN roles r ON r.id = u.role_id AND r.name = 'Owner' AND r.is_global = 0
         WHERE u.deleted_at IS NULL

@@ -1,4 +1,4 @@
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function diagnoseUser(email) {
   try {

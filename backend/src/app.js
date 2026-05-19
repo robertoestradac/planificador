@@ -44,11 +44,26 @@ app.set('trust proxy', 1);
 // ── CORS ──────────────────────────────────────────────────────
 app.use(cors({
   origin: (origin, callback) => {
+    // Same-origin / curl / server-to-server (sin Origin header)
     if (!origin) return callback(null, true);
-    if (config.cors.origin.includes(origin) || config.env === 'development') {
-      return callback(null, true);
+
+    // Whitelist explícita configurada por env
+    if (config.cors.origin.includes(origin)) return callback(null, true);
+
+    // En desarrollo permitimos SOLO localhost / 127.0.0.1 (cualquier puerto/protocolo)
+    if (config.env === 'development') {
+      try {
+        const { hostname } = new URL(origin);
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+          return callback(null, true);
+        }
+      } catch {
+        // origin malformado → cae al reject
+      }
     }
-    callback(new Error('Not allowed by CORS'));
+
+    logger.warn(`CORS rejected origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

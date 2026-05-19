@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const mysql = require('mysql2/promise');
 const config = require('../config');
 
@@ -43,9 +45,14 @@ CREATE TABLE IF NOT EXISTS users (
   name          VARCHAR(255)  NOT NULL,
   email         VARCHAR(255)  NOT NULL,
   password_hash VARCHAR(255)  NOT NULL,
-  totp_secret   VARCHAR(255)  NULL,
-  totp_enabled  TINYINT(1)    NOT NULL DEFAULT 0,
+  totp_secret                  VARCHAR(255)  NULL,
+  totp_enabled                 TINYINT(1)    NOT NULL DEFAULT 0,
+  email_verified               TINYINT(1)    NOT NULL DEFAULT 0,
+  email_verification_token     VARCHAR(255)  NULL,
+  email_verification_expires   DATETIME      NULL,
   status        ENUM('active','inactive','suspended') NOT NULL DEFAULT 'active',
+  must_change_password         TINYINT(1)    NOT NULL DEFAULT 0,
+  onboarding_completed         TINYINT(1)    NOT NULL DEFAULT 0,
   created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at    DATETIME      NULL,
@@ -304,6 +311,7 @@ CREATE TABLE IF NOT EXISTS plan_budget_items (
   name           VARCHAR(255)  NOT NULL,
   estimated_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
   actual_cost    DECIMAL(12,2) NULL,
+  advance_amount DECIMAL(12,2) NULL,
   payment_status ENUM('pendiente','anticipo','pagado') NOT NULL DEFAULT 'pendiente',
   notes          TEXT          NULL,
   created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -458,7 +466,7 @@ CREATE TABLE IF NOT EXISTS payments (
   plan_id       CHAR(36)       NOT NULL,
   amount        DECIMAL(10,2)  NOT NULL,
   currency      VARCHAR(3)     NOT NULL DEFAULT 'USD',
-  method        ENUM('bank_transfer','payment_link') NOT NULL DEFAULT 'bank_transfer',
+  method        ENUM('bank_transfer','payment_link','admin_assigned') NOT NULL DEFAULT 'bank_transfer',
   status        ENUM('pending','confirmed','rejected') NOT NULL DEFAULT 'pending',
   reference     VARCHAR(255)   NULL COMMENT 'Número de referencia bancaria',
   notes         TEXT           NULL,
@@ -548,6 +556,19 @@ CREATE TABLE IF NOT EXISTS smtp_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO smtp_config (id) VALUES (1);
+
+-- ============================================================
+-- EMAIL VERIFICATION columns (added after initial schema)
+-- ============================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified              TINYINT(1)   NOT NULL DEFAULT 0   AFTER totp_enabled;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token    VARCHAR(255) NULL                  AFTER email_verified;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires  DATETIME     NULL                  AFTER email_verification_token;
+ALTER TABLE users ADD INDEX IF NOT EXISTS idx_email_verification_token (email_verification_token);
+
+-- ============================================================
+-- ONBOARDING TOUR column (added after initial schema)
+-- ============================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed TINYINT(1) NOT NULL DEFAULT 0 AFTER must_change_password;
 `;
 
 // Errores ignorables al reintentar migraciones (ya aplicadas):
@@ -609,11 +630,74 @@ async function migrate() {
       }
     }
     console.log(`Migrations completed: ${applied} applied, ${skipped} skipped (already existed).`);
+
+    // ── Versioned migrations ────────────────────────────────
+    // Aplica archivos `.sql` numerados de ./migrations en orden y los
+    // registra en schema_migrations para no volver a ejecutarlos.
+    await runVersionedMigrations(conn);
   } catch (err) {
     console.error('Migration failed:', err.message);
     process.exit(1);
   } finally {
     await conn.end();
+  }
+}
+
+async function runVersionedMigrations(conn) {
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version    VARCHAR(255) NOT NULL PRIMARY KEY,
+      applied_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      checksum   VARCHAR(64)  NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  const dir = path.join(__dirname, 'migrations');
+  if (!fs.existsSync(dir)) return;
+
+  const files = fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  if (files.length === 0) {
+    console.log('No versioned migrations found.');
+    return;
+  }
+
+  const [appliedRows] = await conn.query('SELECT version FROM schema_migrations');
+  const appliedSet = new Set(appliedRows.map((r) => r.version));
+
+  let count = 0;
+  for (const file of files) {
+    const version = file.replace(/\.sql$/i, '');
+    if (appliedSet.has(version)) continue;
+
+    const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+    const crypto = require('crypto');
+    const checksum = crypto.createHash('sha256').update(sql).digest('hex');
+
+    console.log(`→ Applying ${file}`);
+    const stmts = splitStatements(sql).map(normalizeStatement);
+    for (const stmt of stmts) {
+      try {
+        await conn.query(stmt);
+      } catch (err) {
+        if (IGNORABLE_ERRNOS.has(err.errno)) continue;
+        console.error(`\n✖ Failed in ${file}:\n`, stmt);
+        throw err;
+      }
+    }
+    await conn.query(
+      'INSERT INTO schema_migrations (version, checksum) VALUES (?, ?)',
+      [version, checksum]
+    );
+    count++;
+  }
+
+  if (count === 0) {
+    console.log('Versioned migrations: nothing new to apply.');
+  } else {
+    console.log(`Versioned migrations: ${count} applied.`);
   }
 }
 

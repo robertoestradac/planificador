@@ -12,10 +12,10 @@ import AppBranding from '@/components/layout/AppBranding';
 
 const navItems = [
   { label: 'Dashboard',      href: '/dashboard',              icon: LayoutDashboard },
-  { label: 'Eventos',        href: '/dashboard/events',       icon: Calendar },
+  { label: 'Eventos',        href: '/dashboard/events',       icon: Calendar,        dataTour: 'nav-events' },
   { label: 'Planificador',   href: '/dashboard/planner',      icon: ClipboardList },
   { label: 'Plantillas',     href: '/dashboard/templates',    icon: LayoutTemplate },
-  { label: 'Invitaciones',   href: '/dashboard/invitations',  icon: Mail },
+  { label: 'Invitaciones',   href: '/dashboard/invitations',  icon: Mail,            dataTour: 'nav-invitations' },
   { label: 'Invitados',      href: '/dashboard/guests',       icon: Users },
   { label: 'Fotos',          href: '/dashboard/photos',       icon: Camera },
   { label: 'Analíticas',     href: '/dashboard/analytics',    icon: BarChart3 },
@@ -52,7 +52,7 @@ export default function ClientSidebar({ onClose }) {
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map(({ label, href, icon: Icon }) => {
+        {navItems.map(({ label, href, icon: Icon, dataTour }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
           const isPlanner = href === '/dashboard/planner';
           const linkEl = (
@@ -60,6 +60,7 @@ export default function ClientSidebar({ onClose }) {
               key={href}
               href={href}
               onMouseEnter={() => handleHover(href)}
+              data-tour={dataTour}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                 active

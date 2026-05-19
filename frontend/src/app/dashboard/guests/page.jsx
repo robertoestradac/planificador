@@ -308,27 +308,59 @@ export default function GuestsPage() {
       </div>
 
       {/* Invitation selector */}
-      <div className="flex items-center gap-4">
-        <Label className="flex-shrink-0">Invitación:</Label>
-        {loadingInvitations ? (
-          <div className="h-10 w-64 bg-gray-100 rounded-md animate-pulse" />
-        ) : invitations.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-md px-3 py-2">
-            <span>No tienes invitaciones creadas.</span>
-            <a href="/dashboard/invitations" className="underline font-medium">Crear una</a>
+      {loadingInvitations ? (
+        <div className="flex gap-2">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-14 w-44 bg-gray-100 rounded-xl animate-pulse" />)}
+        </div>
+      ) : invitations.length === 0 ? (
+        <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+          <span>No tienes invitaciones creadas.</span>
+          <a href="/dashboard/invitations" className="underline font-medium">Crear una</a>
+        </div>
+      ) : (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Selecciona una invitacion</p>
+          <div className="flex flex-wrap gap-3">
+            {invitations.map(inv => {
+              const isActive = selectedInv === inv.id;
+              return (
+                <button
+                  key={inv.id}
+                  type="button"
+                  onClick={() => setSelectedInv(inv.id)}
+                  className={`
+                    relative flex items-center gap-3 px-4 py-3 rounded-xl text-left
+                    transition-all duration-200 border-2 min-w-[180px]
+                    ${isActive
+                      ? 'bg-violet-600 text-white border-violet-600 shadow-lg shadow-violet-200 scale-[1.02]'
+                      : 'bg-white text-gray-700 border-gray-200 hover:border-violet-300 hover:shadow-md'
+                    }
+                  `}
+                >
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    isActive ? 'bg-white/20' : 'bg-violet-100'
+                  }`}>
+                    <Users className={`w-4 h-4 ${isActive ? 'text-white' : 'text-violet-600'}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-gray-900'}`}>
+                      {inv.title}
+                    </p>
+                    <p className={`text-[11px] ${isActive ? 'text-violet-200' : 'text-gray-400'}`}>
+                      {inv.event_name || 'Invitacion'}
+                    </p>
+                  </div>
+                  {inv.status === 'published' && (
+                    <span className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                      isActive ? 'bg-green-300' : 'bg-green-500'
+                    }`} title="Publicada" />
+                  )}
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <select
-            className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm flex-1 max-w-sm"
-            value={selectedInv}
-            onChange={e => setSelectedInv(e.target.value)}
-          >
-            {invitations.map(inv => (
-              <option key={inv.id} value={inv.id}>{inv.title}</option>
-            ))}
-          </select>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Stats */}
       {stats && (
@@ -547,7 +579,17 @@ export default function GuestsPage() {
                           <div className="text-xs">{guest.email || '—'}</div>
                           <div className="text-xs">{guest.phone || ''}</div>
                         </td>
-                        <td className="py-3 text-center">{guest.party_size || 1}</td>
+                        <td className="py-3 text-center">
+                          {guest.status === 'confirmed' && guest.rsvp_party_size != null && guest.rsvp_party_size !== guest.party_size ? (
+                            <span className="inline-flex items-center gap-0.5">
+                              <span className="font-semibold text-green-700">{guest.rsvp_party_size}</span>
+                              <span className="text-gray-300">/</span>
+                              <span className="text-gray-400">{guest.party_size || 1}</span>
+                            </span>
+                          ) : (
+                            <span>{guest.party_size || 1}</span>
+                          )}
+                        </td>
                         <td className="py-3 whitespace-nowrap">
                           {guest.table_number != null ? (
                             <span

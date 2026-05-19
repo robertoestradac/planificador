@@ -1,4 +1,4 @@
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 const { v4: uuidv4 } = require('uuid');
 
 async function ensureFreePlan() {

@@ -5,23 +5,21 @@ const AppError = require('../../utils/AppError');
 
 const UsersService = {
   async create({ tenant_id, role_id, name, email, password }, requestingUser) {
-    // Check plan user limit
+    // Check plan user limit using centralized credits
     if (tenant_id) {
-      const [subRows] = await pool.query(
-        `SELECT s.plan_id, p.max_users FROM subscriptions s
-         JOIN plans p ON p.id = s.plan_id
-         WHERE s.tenant_id = ? AND s.status = 'active' AND s.expires_at > NOW()
-         ORDER BY s.expires_at DESC LIMIT 1`,
-        [tenant_id]
+      const { assertCredit } = require('../../utils/credits');
+      await assertCredit(tenant_id, 'users');
+    }
+
+    // If no role_id provided, assign the default "Member" role
+    if (!role_id && tenant_id) {
+      const [[memberRole]] = await pool.query(
+        "SELECT id FROM roles WHERE name = 'Member' AND is_global = 0 LIMIT 1"
       );
-      if (subRows.length && subRows[0].max_users !== null) {
-        const currentCount = await UsersModel.countByTenant(tenant_id);
-        if (currentCount >= subRows[0].max_users) {
-          throw new AppError(
-            `User limit reached for your plan (max: ${subRows[0].max_users}). Please upgrade.`,
-            403
-          );
-        }
+      if (memberRole) {
+        role_id = memberRole.id;
+      } else {
+        throw new AppError('Default Member role not found. Contact admin.', 500);
       }
     }
 

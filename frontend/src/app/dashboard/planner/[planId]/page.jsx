@@ -238,7 +238,7 @@ function BudgetTab({ planId }) {
   const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId]     = useState(null);
-  const emptyForm = { category: 'Otros', name: '', estimated_cost: '', actual_cost: '', payment_status: 'pendiente', notes: '' };
+  const emptyForm = { category: 'Otros', name: '', actual_cost: '', advance_amount: '', payment_status: 'pendiente', notes: '' };
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
@@ -256,10 +256,21 @@ function BudgetTab({ planId }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    const actualCost = parseFloat(form.actual_cost) || 0;
+    const advanceAmt = parseFloat(form.advance_amount) || 0;
+
+    // Auto-determinar estado de pago
+    let paymentStatus = form.payment_status;
+    if (advanceAmt <= 0) paymentStatus = 'pendiente';
+    else if (advanceAmt >= actualCost && actualCost > 0) paymentStatus = 'pagado';
+    else if (advanceAmt > 0) paymentStatus = 'anticipo';
+
     const payload = {
       ...form,
-      estimated_cost: parseFloat(form.estimated_cost) || 0,
-      actual_cost: form.actual_cost !== '' ? parseFloat(form.actual_cost) : null,
+      estimated_cost: actualCost, // mantener compatibilidad con el campo DB
+      actual_cost: actualCost,
+      advance_amount: advanceAmt || null,
+      payment_status: paymentStatus,
     };
     try {
       if (editId) {
@@ -294,7 +305,11 @@ function BudgetTab({ planId }) {
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-violet-600" /></div>;
   if (!budget) return null;
 
-  const overBudget = budget.budget_total && budget.total_estimated > budget.budget_total;
+  // Calcular totales
+  const totalCost = budget.items.reduce((sum, i) => sum + Number(i.actual_cost || i.estimated_cost || 0), 0);
+  const totalAdvance = budget.items.reduce((sum, i) => sum + Number(i.advance_amount || 0), 0);
+  const totalRemaining = totalCost - totalAdvance;
+  const overBudget = budget.budget_total && totalCost > budget.budget_total;
 
   return (
     <div className="space-y-4">
@@ -306,25 +321,23 @@ function BudgetTab({ planId }) {
           </div>
         )}
         <div className="p-3 bg-blue-50 rounded-xl text-center">
-          <p className="text-xs text-blue-600 font-medium">Estimado</p>
-          <p className="text-lg font-bold text-blue-900">Q{Number(budget.total_estimated).toLocaleString()}</p>
+          <p className="text-xs text-blue-600 font-medium">Costo total</p>
+          <p className="text-lg font-bold text-blue-900">Q{totalCost.toLocaleString()}</p>
         </div>
         <div className="p-3 bg-green-50 rounded-xl text-center">
-          <p className="text-xs text-green-600 font-medium">Real pagado</p>
-          <p className="text-lg font-bold text-green-900">Q{Number(budget.total_actual).toLocaleString()}</p>
+          <p className="text-xs text-green-600 font-medium">Anticipos pagados</p>
+          <p className="text-lg font-bold text-green-900">Q{totalAdvance.toLocaleString()}</p>
         </div>
-        {budget.balance !== null && (
-          <div className={`p-3 rounded-xl text-center ${overBudget ? 'bg-red-50' : 'bg-gray-50'}`}>
-            <p className={`text-xs font-medium ${overBudget ? 'text-red-600' : 'text-gray-600'}`}>Balance</p>
-            <p className={`text-lg font-bold ${overBudget ? 'text-red-700' : 'text-gray-900'}`}>Q{Number(budget.balance).toLocaleString()}</p>
-          </div>
-        )}
+        <div className={`p-3 rounded-xl text-center ${totalRemaining > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
+          <p className={`text-xs font-medium ${totalRemaining > 0 ? 'text-amber-600' : 'text-gray-600'}`}>Resta por pagar</p>
+          <p className={`text-lg font-bold ${totalRemaining > 0 ? 'text-amber-700' : 'text-gray-900'}`}>Q{totalRemaining.toLocaleString()}</p>
+        </div>
       </div>
 
       {overBudget && (
         <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          El presupuesto estimado supera el total definido
+          El costo total supera el presupuesto definido
         </div>
       )}
 
@@ -342,14 +355,14 @@ function BudgetTab({ planId }) {
                 <FieldInput label="Concepto *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Ej: Salon de eventos" />
               </div>
               <FieldSelect label="Categoria" value={form.category} onChange={v => setForm({ ...form, category: v })} options={BUDGET_CATEGORIES} />
-              <FieldInput label="Costo estimado *" type="number" min="0" step="0.01" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })} required placeholder="0.00" />
-              <FieldInput label="Costo real" type="number" min="0" step="0.01" value={form.actual_cost} onChange={e => setForm({ ...form, actual_cost: e.target.value })} placeholder="0.00" />
-              <FieldSelect
-                label="Estado de pago"
-                value={form.payment_status}
-                onChange={v => setForm({ ...form, payment_status: v })}
-                options={Object.entries(PAYMENT_STATUSES).map(([v, s]) => ({ value: v, label: s.label }))}
-              />
+              <FieldInput label="Costo total *" type="number" min="0" step="0.01" value={form.actual_cost} onChange={e => setForm({ ...form, actual_cost: e.target.value })} required placeholder="0.00" />
+              <FieldInput label="Anticipo pagado" type="number" min="0" step="0.01" value={form.advance_amount} onChange={e => setForm({ ...form, advance_amount: e.target.value })} placeholder="0.00" />
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Resta por pagar</label>
+                <div className="h-10 flex items-center px-3 bg-gray-50 border border-gray-200 rounded-md text-sm font-semibold text-gray-700">
+                  Q{(Math.max(0, (parseFloat(form.actual_cost) || 0) - (parseFloat(form.advance_amount) || 0))).toLocaleString()}
+                </div>
+              </div>
               <div className="md:col-span-3 flex gap-2">
                 <Button type="submit" size="sm">{editId ? 'Actualizar' : 'Agregar'}</Button>
                 <Button type="button" size="sm" variant="outline" onClick={() => { setShowForm(false); setEditId(null); }}>Cancelar</Button>
@@ -362,30 +375,36 @@ function BudgetTab({ planId }) {
       <div className="space-y-2">
         {budget.items.length === 0 ? (
           <p className="text-center text-gray-400 py-8 text-sm">Sin gastos registrados aun</p>
-        ) : budget.items.map(item => (
-          <div key={item.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800">{item.name}</p>
-              <p className="text-xs text-gray-400">{item.category}</p>
+        ) : budget.items.map(item => {
+          const cost = Number(item.actual_cost || item.estimated_cost || 0);
+          const advance = Number(item.advance_amount || 0);
+          const remaining = Math.max(0, cost - advance);
+          return (
+            <div key={item.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800">{item.name}</p>
+                <p className="text-xs text-gray-400">{item.category}</p>
+              </div>
+              <div className="text-right text-xs space-y-0.5">
+                <p className="font-semibold text-gray-800">Q{cost.toLocaleString()}</p>
+                {advance > 0 && <p className="text-green-600">Anticipo: Q{advance.toLocaleString()}</p>}
+                {remaining > 0 && <p className="text-amber-600">Resta: Q{remaining.toLocaleString()}</p>}
+              </div>
+              <StatusBadge map={PAYMENT_STATUSES} value={item.payment_status} />
+              <div className="flex gap-1">
+                <button
+                  onClick={() => { setEditId(item.id); setForm({ category: item.category, name: item.name, actual_cost: item.actual_cost ?? item.estimated_cost ?? '', advance_amount: item.advance_amount ?? '', payment_status: item.payment_status, notes: item.notes || '' }); setShowForm(true); }}
+                  className="p-1 text-gray-400 hover:text-violet-600"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleDelete(item.id)} className="p-1 text-gray-400 hover:text-red-500">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="text-right text-sm">
-              <p className="font-semibold text-gray-800">Q{Number(item.estimated_cost).toLocaleString()}</p>
-              {item.actual_cost != null && <p className="text-xs text-gray-400">Real: Q{Number(item.actual_cost).toLocaleString()}</p>}
-            </div>
-            <StatusBadge map={PAYMENT_STATUSES} value={item.payment_status} />
-            <div className="flex gap-1">
-              <button
-                onClick={() => { setEditId(item.id); setForm({ category: item.category, name: item.name, estimated_cost: item.estimated_cost, actual_cost: item.actual_cost ?? '', payment_status: item.payment_status, notes: item.notes || '' }); setShowForm(true); }}
-                className="p-1 text-gray-400 hover:text-violet-600"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => handleDelete(item.id)} className="p-1 text-gray-400 hover:text-red-500">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

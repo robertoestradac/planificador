@@ -23,4 +23,11 @@ const logoutSchema = Joi.object({
   refresh_token: Joi.string().required(),
 });
 
-module.exports = { loginSchema, registerSchema, refreshSchema, logoutSchema };
+const changePasswordSchema = Joi.object({
+  current_password: Joi.string().min(6).required(),
+  new_password:     Joi.string().min(8).max(128).required()
+    .invalid(Joi.ref('current_password'))
+    .messages({ 'any.invalid': 'La nueva contraseña debe ser distinta a la actual' }),
+});
+
+module.exports = { loginSchema, registerSchema, refreshSchema, logoutSchema, changePasswordSchema };

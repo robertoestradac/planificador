@@ -9,12 +9,12 @@ const { v4: uuidv4 } = require('uuid');
 
 const InvitationsService = {
   async create({ tenant_id, event_id, template_id, title, slug, builder_json, html, css, user }) {
-    // 1. Verify active subscription exists (unless Owner)
-    const isOwner = user && user.role_name === 'Owner' && user.tenant_id === tenant_id;
-    
-    if (!isOwner) {
-      const sub = await SubscriptionsModel.findActiveByTenant(tenant_id);
-      if (!sub) throw new AppError('No active subscription found', 403);
+    // 1. Verify active subscription or confirmed payments exist
+    const sub = await SubscriptionsModel.findActiveByTenant(tenant_id).catch(() => null);
+    const { getTenantCredits } = require('../../utils/credits');
+    const credits = await getTenantCredits(tenant_id);
+    if (!sub && credits.events.total === 0) {
+      throw new AppError('No active subscription found', 403);
     }
 
     // 2. Verify event exists and belongs to tenant
@@ -24,14 +24,11 @@ const InvitationsService = {
     // 3. Check if event already has an invitation (1 invitation per event rule)
     const existing = await InvitationsModel.findAllByTenant(tenant_id, { event_id, limit: 1 });
     if (existing.data && existing.data.length > 0) {
-      throw new AppError('Este evento ya tiene una invitación. Cada evento puede tener solo 1 invitación.', 400);
+      throw new AppError('Este evento ya tiene una invitacion. Cada evento puede tener solo 1 invitacion.', 400);
     }
 
-    // 4. Verify invitation limit (based on events limit: 1 invitation per event)
-    // Owner bypasses this check
-    if (!isOwner) {
-      await assertCredit(tenant_id, 'invitations');
-    }
+    // 4. Verify invitation limit (all users including Owner)
+    await assertCredit(tenant_id, 'invitations');
 
     // Generate slug if not provided
     let finalSlug = slug ? slugify(slug) : slugify(title) + '-' + uuidv4().slice(0, 8);

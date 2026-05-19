@@ -153,7 +153,11 @@ const AuthService = {
 
     return {
       accessToken, refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role_name, tenant_id: user.tenant_id },
+      user: {
+        id: user.id, name: user.name, email: user.email,
+        role: user.role_name, tenant_id: user.tenant_id,
+        must_change_password: !!user.must_change_password,
+      },
     };
   },
 
@@ -181,7 +185,11 @@ const AuthService = {
 
     return {
       accessToken, refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role_name, tenant_id: user.tenant_id },
+      user: {
+        id: user.id, name: user.name, email: user.email,
+        role: user.role_name, tenant_id: user.tenant_id,
+        must_change_password: !!user.must_change_password,
+      },
     };
   },
 
@@ -274,7 +282,45 @@ const AuthService = {
       id: user.id, name: user.name, email: user.email,
       role: user.role_name, tenant_id: user.tenant_id, is_global: user.is_global,
       totp_enabled: !!user.totp_enabled,
+      must_change_password: !!user.must_change_password,
+      onboarding_completed: !!user.onboarding_completed,
     };
+  },
+
+  /**
+   * Marca el tour de onboarding como completado (o lo resetea si completed=false).
+   * Usado tras finalizar/saltar el tour del primer login y para reactivarlo desde
+   * "Ver tutorial otra vez".
+   */
+  async setOnboardingCompleted(userId, completed = true) {
+    await AuthModel.setOnboardingCompleted(userId, completed ? 1 : 0);
+    return { onboarding_completed: !!completed };
+  },
+
+  /**
+   * Change password — used both by users with `must_change_password=1`
+   * (forced rotation) and by anyone who wants to update their password.
+   * Revokes all refresh tokens after a successful change.
+   */
+  async changePassword(userId, currentPassword, newPassword) {
+    if (!newPassword || newPassword.length < 8) {
+      throw new AppError('La nueva contraseña debe tener al menos 8 caracteres', 400);
+    }
+    const user = await AuthModel.findUserById(userId);
+    if (!user) throw new AppError('Usuario no encontrado', 404);
+
+    const ok = await bcrypt.compare(currentPassword || '', user.password_hash);
+    if (!ok) throw new AppError('La contraseña actual es incorrecta', 401);
+
+    const sameAsBefore = await bcrypt.compare(newPassword, user.password_hash);
+    if (sameAsBefore) {
+      throw new AppError('La nueva contraseña debe ser distinta a la actual', 400);
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await AuthModel.updatePassword(userId, newHash);
+    await AuthModel.revokeAllUserTokens(userId);
+    return { changed: true };
   },
 
   // ============================================================

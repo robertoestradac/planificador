@@ -276,15 +276,21 @@ const GuestsModel = {
   async getRsvpStats(invitationId) {
     const [[totals]] = await pool.query(
       `SELECT COUNT(*) AS total,
-              COALESCE(SUM(party_size), 0) AS total_seats,
-              SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
-              SUM(CASE WHEN status = 'declined'  THEN 1 ELSE 0 END) AS declined,
-              SUM(CASE WHEN status = 'pending'   THEN 1 ELSE 0 END) AS pending,
-              SUM(CASE WHEN checked_in = 1       THEN 1 ELSE 0 END) AS checked_in,
-              SUM(CASE WHEN invitation_sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
-              COALESCE(SUM(CASE WHEN status = 'confirmed' THEN party_size ELSE 0 END), 0) AS confirmed_seats
-       FROM guests
-       WHERE invitation_id = ?`,
+              COALESCE(SUM(g.party_size), 0) AS total_seats,
+              SUM(CASE WHEN g.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+              SUM(CASE WHEN g.status = 'declined'  THEN 1 ELSE 0 END) AS declined,
+              SUM(CASE WHEN g.status = 'pending'   THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN g.checked_in = 1       THEN 1 ELSE 0 END) AS checked_in,
+              SUM(CASE WHEN g.invitation_sent_at IS NOT NULL THEN 1 ELSE 0 END) AS sent,
+              COALESCE(SUM(
+                CASE WHEN g.status = 'confirmed'
+                  THEN COALESCE(r.party_size_confirmed, g.party_size)
+                  ELSE 0
+                END
+              ), 0) AS confirmed_seats
+       FROM guests g
+       LEFT JOIN rsvps r ON r.guest_id = g.id
+       WHERE g.invitation_id = ?`,
       [invitationId]
     );
 

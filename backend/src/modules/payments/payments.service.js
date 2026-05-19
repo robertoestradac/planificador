@@ -16,7 +16,7 @@ const PaymentsService = {
   },
 
   async getByTenant(tenantId, filters) {
-    return PaymentsModel.findByTenant(tenantId, filters);
+    return PaymentsModel.findHistoryByTenant(tenantId, filters);
   },
 
   async getById(id) {

@@ -3,7 +3,7 @@
  * Converts the database and all tables/columns to utf8mb4_unicode_ci.
  * Run once: node src/database/fix_charset.js
  */
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function fixCharset() {
   const conn = await pool.getConnection();

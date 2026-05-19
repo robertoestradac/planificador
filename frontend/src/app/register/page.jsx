@@ -1,5 +1,5 @@
 'use client';
-import { useState, Suspense } from 'react';
+import { useState, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,28 +10,51 @@ import { toast } from '@/hooks/use-toast';
 import useAuthStore from '@/store/authStore';
 import api from '@/lib/api';
 import Link from 'next/link';
+import MathCaptcha from '@/components/auth/MathCaptcha';
 
 function RegisterForm() {
   const router  = useRouter();
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [captchaValid, setCaptchaValid] = useState(false);
   const [form, setForm] = useState({
     name: '', email: '', password: '',
   });
+
+  const handleCaptchaChange = useCallback((isValid) => {
+    setCaptchaValid(isValid);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       const { data } = await api.post('/auth/register', { ...form, company_name: form.name });
-      const { accessToken, refreshToken, user } = data.data;
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
-      document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
-      document.cookie = `session_token=${refreshToken}; path=/; max-age=604800; SameSite=Lax`;
-      useAuthStore.setState({ user, accessToken, refreshToken, isAuthenticated: true });
-      toast({ title: `Bienvenido, ${user.name}!`, description: 'Tu cuenta fue creada exitosamente.' });
-      router.push('/dashboard');
+      const result = data.data;
+
+      // El registro ahora requiere verificación de email antes de poder iniciar sesión
+      if (result.requiresVerification) {
+        toast({
+          title: '¡Cuenta creada!',
+          description: result.message || 'Revisa tu correo para verificar tu cuenta antes de iniciar sesión.',
+        });
+        router.push('/login');
+        return;
+      }
+
+      // Fallback por si en el futuro se devuelven tokens directamente
+      const accessToken = result.accessToken || result.access_token;
+      const refreshToken = result.refreshToken || result.refresh_token;
+      const user = result.user;
+      if (accessToken && refreshToken && user) {
+        localStorage.setItem('access_token', accessToken);
+        localStorage.setItem('refresh_token', refreshToken);
+        document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `session_token=${refreshToken}; path=/; max-age=604800; SameSite=Lax`;
+        useAuthStore.setState({ user, accessToken, refreshToken, isAuthenticated: true });
+        toast({ title: `Bienvenido, ${user.name}!`, description: 'Tu cuenta fue creada exitosamente.' });
+        router.push('/dashboard');
+      }
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message || 'Error al crear cuenta' });
     } finally { setSaving(false); }
@@ -74,7 +97,9 @@ function RegisterForm() {
                 {'Podr\u00e1s solicitar un plan desde tu panel una vez registrado.'}
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={saving}>
+              <MathCaptcha onValidChange={handleCaptchaChange} />
+
+              <Button type="submit" className="w-full" size="lg" disabled={saving || !captchaValid}>
                 {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creando cuenta...</> : 'Crear cuenta'}
               </Button>
 

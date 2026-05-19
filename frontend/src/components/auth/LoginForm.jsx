@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Lock, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import AppBranding from '@/components/layout/AppBranding';
+import MathCaptcha from '@/components/auth/MathCaptcha';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +28,11 @@ export default function LoginForm({ variant = 'tenant' }) {
   const [form, setForm] = useState({ email: '', password: '' });
   const [step, setStep] = useState('credentials');
   const [totpCode, setTotpCode] = useState('');
+  const [captchaValid, setCaptchaValid] = useState(false);
+
+  const handleCaptchaChange = useCallback((isValid) => {
+    setCaptchaValid(isValid);
+  }, []);
 
   const isAdminMode = variant === 'admin';
   const defaultRedirect = isAdminMode ? '/admin' : '/dashboard';
@@ -245,7 +251,12 @@ export default function LoginForm({ variant = 'tenant' }) {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <MathCaptcha
+                onValidChange={handleCaptchaChange}
+                variant={isAdminMode ? 'admin' : 'default'}
+              />
+
+              <Button type="submit" className="w-full" disabled={loading || !captchaValid}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

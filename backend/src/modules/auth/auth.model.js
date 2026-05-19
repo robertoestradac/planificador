@@ -9,6 +9,7 @@ const AuthModel = {
     let query = `
       SELECT u.id, u.tenant_id, u.role_id, u.name, u.email, u.password_hash,
              u.email_verified, u.totp_secret, u.totp_enabled, u.status,
+             u.must_change_password,
              r.name AS role_name, r.is_global
       FROM users u
       JOIN roles r ON r.id = u.role_id
@@ -29,8 +30,8 @@ const AuthModel = {
 
   async findUserById(id) {
     const [rows] = await pool.query(
-      `SELECT u.id, u.tenant_id, u.role_id, u.name, u.email, u.status,
-              u.totp_secret, u.totp_enabled,
+      `SELECT u.id, u.tenant_id, u.role_id, u.name, u.email, u.password_hash, u.status,
+              u.totp_secret, u.totp_enabled, u.must_change_password, u.onboarding_completed,
               r.name AS role_name, r.is_global
        FROM users u
        JOIN roles r ON r.id = u.role_id
@@ -38,6 +39,20 @@ const AuthModel = {
       [id]
     );
     return rows[0] || null;
+  },
+
+  async setOnboardingCompleted(userId, completed = 1) {
+    await pool.query(
+      'UPDATE users SET onboarding_completed = ? WHERE id = ?',
+      [completed ? 1 : 0, userId]
+    );
+  },
+
+  async updatePassword(userId, newHash) {
+    await pool.query(
+      'UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?',
+      [newHash, userId]
+    );
   },
 
   async saveRefreshToken(userId, token, expiresAt) {

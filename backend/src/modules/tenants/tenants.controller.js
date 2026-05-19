@@ -63,6 +63,20 @@ const TenantsController = {
       return success(res, stats);
     } catch (err) { next(err); }
   },
+
+  async verifyOwnerEmail(req, res, next) {
+    try {
+      const result = await TenantsService.verifyOwnerEmail(req.params.id);
+      return success(res, result, 'Email del owner verificado correctamente');
+    } catch (err) { next(err); }
+  },
+
+  async resendOwnerVerification(req, res, next) {
+    try {
+      const result = await TenantsService.resendOwnerVerification(req.params.id);
+      return success(res, result, 'Email de verificación reenviado');
+    } catch (err) { next(err); }
+  },
 };
 
 module.exports = TenantsController;

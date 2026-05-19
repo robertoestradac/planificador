@@ -40,7 +40,6 @@ test_*.js
 *.test.js
 
 # Documentation temporal
-DEPLOY*.md
 CHECKLIST*.md
 CAMBIOS*.md
 TODO*.md

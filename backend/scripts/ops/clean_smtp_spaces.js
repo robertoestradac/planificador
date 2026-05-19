@@ -3,7 +3,7 @@
  * Run this if re-saving in UI doesn't work
  */
 
-const { pool } = require('./connection');
+const { pool } = require('../../src/database/connection');
 
 async function cleanSmtpSpaces() {
   try {

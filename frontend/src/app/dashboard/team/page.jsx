@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Plus, Search, Users, Pencil, Trash2, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Users, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import api from '@/lib/api';
 import dataCache from '@/lib/dataCache';
 import { formatDate } from '@/lib/utils';
@@ -16,47 +17,63 @@ const statusVariant = { active: 'success', inactive: 'secondary', suspended: 'de
 
 export default function TeamPage() {
   const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [saving, setSaving] = useState(false);
+  const [limitAlert, setLimitAlert] = useState(false);
+  const [creditInfo, setCreditInfo] = useState(null);
   const confirm = useConfirm();
 
   const fetchData = async () => {
     try {
-      // Carga desde cache (instantáneo si hubo prefetch en hover)
-      const [usersData, rolesData] = await Promise.all([
-        dataCache.fetchers.users(),
-        dataCache.fetchers.roles(),
-      ]);
+      const usersData = await dataCache.fetchers.users();
       setUsers(usersData);
-      setRoles((rolesData || []).filter(r => !r.is_global));
     } catch { toast({ variant: 'destructive', title: 'Error al cargar equipo' }); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
+  // Verificar creditos antes de abrir el formulario
+  const handleAddUser = async () => {
+    try {
+      const { data } = await api.get('/payments/my/credits');
+      const credits = data.data;
+      if (credits && credits.users.available !== null && credits.users.available <= 0) {
+        setCreditInfo(credits.users);
+        setLimitAlert(true);
+        return;
+      }
+    } catch {}
+    setShowForm(true);
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       await api.post('/users', form);
-      toast({ title: 'Usuario creado', description: `${form.name} fue agregado al equipo`, variant: 'success' });
+      toast({ title: 'Usuario creado', description: `${form.name} fue agregado al equipo` });
       setShowForm(false);
-      setForm({ name: '', email: '', password: '', role_id: '' });
+      setForm({ name: '', email: '', password: '' });
       fetchData();
     } catch (err) {
-      toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
+      const msg = err.response?.data?.message || 'Error al crear usuario';
+      const isLimit = err.response?.status === 403;
+      toast({
+        variant: 'destructive',
+        title: isLimit ? 'Limite de usuarios alcanzado' : 'Error',
+        description: isLimit ? 'Tu plan no permite mas usuarios. Ve a Mi Plan para ampliar.' : msg,
+      });
     } finally { setSaving(false); }
   };
 
   const handleDelete = async (id, name) => {
     const confirmed = await confirm({
-      title: '¿Eliminar usuario?',
-      message: `¿Estás seguro de eliminar a "${name}" del equipo? Esta acción no se puede deshacer.`,
+      title: 'Eliminar usuario?',
+      message: `Estas seguro de eliminar a "${name}" del equipo? Esta accion no se puede deshacer.`,
       variant: 'danger',
       confirmText: 'Eliminar',
       cancelText: 'Cancelar',
@@ -66,7 +83,7 @@ export default function TeamPage() {
 
     try {
       await api.delete(`/users/${id}`);
-      toast({ title: 'Usuario eliminado', variant: 'success' });
+      toast({ title: 'Usuario eliminado' });
       fetchData();
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: err.response?.data?.message });
@@ -85,7 +102,7 @@ export default function TeamPage() {
           <h1 className="text-3xl font-bold text-gray-900">Equipo</h1>
           <p className="text-gray-500 mt-1">Administra los usuarios de tu cuenta</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={handleAddUser}>
           <Plus className="w-4 h-4 mr-2" /> Agregar Usuario
         </Button>
       </div>
@@ -94,39 +111,44 @@ export default function TeamPage() {
         <Card>
           <CardContent className="p-6">
             <h3 className="font-semibold mb-4">Nuevo Usuario</h3>
-            <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label>Nombre</Label>
-                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Juan Pérez" />
+                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Juan Perez" />
               </div>
               <div>
                 <Label>Email</Label>
                 <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required placeholder="juan@empresa.com" />
               </div>
               <div>
-                <Label>Contraseña</Label>
-                <Input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="Mínimo 8 caracteres" />
+                <Label>Contrasena</Label>
+                <Input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="Minimo 8 caracteres" minLength={8} />
               </div>
-              <div>
-                <Label>Rol</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={form.role_id}
-                  onChange={e => setForm({ ...form, role_id: e.target.value })}
-                  required
-                >
-                  <option value="">Selecciona un rol</option>
-                  {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </div>
-              <div className="md:col-span-2 flex gap-3">
+              <div className="md:col-span-3 flex gap-3">
                 <Button type="submit" disabled={saving}>{saving ? 'Creando...' : 'Crear usuario'}</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               </div>
             </form>
+            <p className="text-xs text-gray-400 mt-3">El usuario se creara con el rol de Colaborador (Member). Podra ver y editar eventos e invitaciones.</p>
           </CardContent>
         </Card>
       )}
+
+      {/* Alert de limite */}
+      <ConfirmDialog
+        open={limitAlert}
+        onOpenChange={setLimitAlert}
+        variant="warning"
+        title="Limite de usuarios alcanzado"
+        message={
+          creditInfo
+            ? `Has usado ${creditInfo.used} de ${creditInfo.total} usuarios disponibles en tu plan. Para agregar mas miembros al equipo, adquiere un nuevo plan.`
+            : 'No puedes agregar mas usuarios con tu plan actual.'
+        }
+        confirmText="Ir a Mi Plan"
+        cancelText="Cerrar"
+        onConfirm={() => { window.location.href = '/dashboard/subscription'; }}
+      />
 
       <Card>
         <CardHeader>

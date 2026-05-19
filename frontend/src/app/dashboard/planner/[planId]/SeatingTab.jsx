@@ -26,10 +26,33 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
   const canvasRef  = useRef(null);
   const dragRef    = useRef(null);
   const saveRef    = useRef(null);
-  const didDragRef = useRef(false); // true if mouse moved enough to be a drag
+  const didDragRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving]   = useState(false);
   const [saved,  setSaved]    = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(CANVAS_W);
+
+  // Track actual canvas width for responsive clamping
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const measure = () => {
+      const w = canvasRef.current?.offsetWidth || CANVAS_W;
+      setCanvasWidth(w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(canvasRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const clampPosition = useCallback((x, y) => {
+    const maxX = canvasWidth - TABLE_DIV - SEAT_MARGIN;
+    const maxY = CANVAS_H - TABLE_DIV - SEAT_MARGIN;
+    return {
+      x: Math.max(SEAT_MARGIN, Math.min(maxX, x)),
+      y: Math.max(SEAT_MARGIN, Math.min(maxY, y)),
+    };
+  }, [canvasWidth]);
 
   const persistPosition = useCallback((tableId, x, y) => {
     if (saveRef.current) clearTimeout(saveRef.current);
@@ -53,7 +76,6 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
   const handleMouseDown = (e, table) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    const canvasRect = canvasRef.current.getBoundingClientRect();
     didDragRef.current = false;
     dragRef.current = {
       tableId: table.id,
@@ -61,8 +83,6 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
       startMouseY: e.clientY,
       origX: parseFloat(table.position_x) || 0,
       origY: parseFloat(table.position_y) || 0,
-      canvasLeft: canvasRect.left,
-      canvasTop:  canvasRect.top,
     };
   };
 
@@ -76,11 +96,8 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
         didDragRef.current = true;
         setIsDragging(true);
       }
-      let newX = origX + dx;
-      let newY = origY + dy;
-      newX = Math.max(SEAT_MARGIN, Math.min(CANVAS_W - TABLE_DIV - SEAT_MARGIN, newX));
-      newY = Math.max(SEAT_MARGIN, Math.min(CANVAS_H - TABLE_DIV - SEAT_MARGIN, newY));
-      onTableMove(tableId, newX, newY);
+      const { x, y } = clampPosition(origX + dx, origY + dy);
+      onTableMove(tableId, x, y);
     };
 
     const handleMouseUp = (e) => {
@@ -93,14 +110,10 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
       setIsDragging(false);
       if (!wasDrag) {
         didDragRef.current = false;
-        return; // treat as click — onTableClick fires via onClick
+        return;
       }
-      let newX = origX + dx;
-      let newY = origY + dy;
-      newX = Math.max(SEAT_MARGIN, Math.min(CANVAS_W - TABLE_DIV - SEAT_MARGIN, newX));
-      newY = Math.max(SEAT_MARGIN, Math.min(CANVAS_H - TABLE_DIV - SEAT_MARGIN, newY));
-      persistPosition(tableId, newX, newY);
-      // Keep didDragRef true briefly so onClick on the circle is suppressed
+      const { x, y } = clampPosition(origX + dx, origY + dy);
+      persistPosition(tableId, x, y);
       setTimeout(() => { didDragRef.current = false; }, 50);
     };
 
@@ -110,7 +123,7 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup',   handleMouseUp);
     };
-  }, [onTableMove, persistPosition]);
+  }, [onTableMove, persistPosition, clampPosition]);
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
@@ -130,13 +143,12 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: CANVAS_W,
           height: CANVAS_H,
           overflow: 'hidden',
           background: '#ffffff',
           backgroundImage: 'radial-gradient(circle, #ddd6fe 1px, transparent 1px)',
           backgroundSize: '28px 28px',
-          border: '1px solid #e5e7eb',
+          border: '2px solid #e5e7eb',
           borderRadius: 16,
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
           cursor: isDragging ? 'grabbing' : 'default',
@@ -154,14 +166,22 @@ function SeatingCanvas({ planId, tables, specialConfig, onTableMove, onSeatClick
             ? `0 4px 16px ${tableColor}55`
             : '0 4px 16px rgba(124,58,237,0.35)';
 
+          // Clamp position to current canvas bounds
+          const rawX = parseFloat(table.position_x) || 0;
+          const rawY = parseFloat(table.position_y) || 0;
+          const maxX = canvasWidth - TABLE_DIV - SEAT_MARGIN;
+          const maxY = CANVAS_H - TABLE_DIV - SEAT_MARGIN;
+          const posX = Math.max(SEAT_MARGIN, Math.min(maxX, rawX));
+          const posY = Math.max(SEAT_MARGIN, Math.min(maxY, rawY));
+
           return (
             <div
               key={table.id}
               onMouseDown={e => handleMouseDown(e, table)}
               style={{
                 position: 'absolute',
-                left: parseFloat(table.position_x) || 0,
-                top:  parseFloat(table.position_y) || 0,
+                left: posX,
+                top:  posY,
                 width: TABLE_DIV,
                 height: TABLE_DIV,
                 cursor: 'grab',
@@ -599,69 +619,79 @@ export default function SeatingTab({ planId }) {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <button
-          onClick={() => addTable(false)}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Agregar mesa</span>
-          <span className="sm:hidden">Mesa</span>
-        </button>
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => addTable(false)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all shadow-md shadow-violet-200"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Agregar mesa</span>
+              <span className="sm:hidden">Mesa</span>
+            </button>
 
-        {specialConfig && !hasBrideTable && (
-          <button
-            onClick={() => addTable(true)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors"
-            style={{ background: specialConfig.color }}
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">{specialConfig.buttonLabel}</span>
-            <span className="sm:hidden">{specialConfig.tableLabel}</span>
-          </button>
-        )}
+            {specialConfig && !hasBrideTable && (
+              <button
+                onClick={() => addTable(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition-all shadow-md"
+                style={{ background: `linear-gradient(135deg, ${specialConfig.color}, ${specialConfig.color}cc)`, boxShadow: `0 4px 12px ${specialConfig.color}44` }}
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">{specialConfig.buttonLabel}</span>
+                <span className="sm:hidden">{specialConfig.tableLabel}</span>
+              </button>
+            )}
 
-        {tables.length > 0 && (
-          <button
-            onClick={() => generateSeatingPdf(tables, eventName, specialConfig)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            <FileDown className="w-4 h-4" />
-            <span className="hidden sm:inline">Descargar PDF</span>
-          </button>
-        )}
-
-        {total > 0 && (
-          <div className="flex flex-wrap items-center gap-3 ml-auto text-xs sm:text-sm text-gray-600">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-              <span className="hidden sm:inline">{occupied} confirmados</span>
-              <span className="sm:hidden">{occupied}</span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-              <span className="hidden sm:inline">{pending} pendientes</span>
-              <span className="sm:hidden">{pending}</span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-slate-400 inline-block" />
-              <span className="hidden sm:inline">{free} libres</span>
-              <span className="sm:hidden">{free}</span>
-            </span>
-            <span className="font-semibold text-violet-700">{pct}%</span>
+            {tables.length > 0 && (
+              <button
+                onClick={() => generateSeatingPdf(tables, eventName, specialConfig)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 text-sm font-medium hover:border-violet-300 hover:bg-violet-50 transition-all"
+              >
+                <FileDown className="w-4 h-4" />
+                <span className="hidden sm:inline">Descargar PDF</span>
+              </button>
+            )}
           </div>
-        )}
+
+          {total > 0 && (
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  {occupied} confirmados
+                </span>
+                <span className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  {pending} pendientes
+                </span>
+                <span className="flex items-center gap-1.5 bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-gray-400" />
+                  {free} libres
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="text-sm font-bold text-violet-700">{pct}%</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Canvas + config panel side by side */}
       {tables.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Users className="w-12 h-12 text-gray-300 mb-4" />
-          <p className="text-gray-500 font-medium mb-2">Sin mesas configuradas</p>
-          <p className="text-gray-400 text-sm mb-4">Agrega tu primera mesa para comenzar</p>
+        <div className="flex flex-col items-center justify-center py-20 text-center bg-white border-2 border-dashed border-gray-200 rounded-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center mb-4">
+            <Users className="w-8 h-8 text-violet-500" />
+          </div>
+          <p className="text-gray-800 font-semibold text-lg mb-1">Sin mesas configuradas</p>
+          <p className="text-gray-400 text-sm mb-6 max-w-xs">Agrega tu primera mesa para comenzar a organizar los asientos de tus invitados</p>
           <button
             onClick={() => addTable(false)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all shadow-lg shadow-violet-200"
           >
             <Plus className="w-4 h-4" /> Agregar primera mesa
           </button>
@@ -681,45 +711,49 @@ export default function SeatingTab({ planId }) {
           </div>
 
           {/* Right panel: table config OR guest list */}
-          <div className="w-full lg:w-64 flex-shrink-0">
+          <div className="w-full lg:w-72 flex-shrink-0">
             {selectedTable ? (
               /* Table config */
-              <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                  <h3 className="font-semibold text-gray-900 text-sm">
+              <div className="bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden">
+                <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-3 flex items-center justify-between">
+                  <h3 className="font-semibold text-white text-sm">
                     {selectedTable.is_bride_table
                       ? (specialConfig?.tableLabel || 'Mesa especial')
                       : `Mesa ${selectedTable.table_number}`}
                   </h3>
-                  <button onClick={() => setSelectedTable(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+                  <button onClick={() => setSelectedTable(null)} className="p-1 rounded-lg hover:bg-white/20 text-white/80">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <div className="p-4 space-y-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-600 block mb-1">Asientos (1–20)</label>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Cantidad de asientos</label>
                     <input
                       type="number" min={1} max={20} value={seatCountInput}
                       onChange={e => setSeatCountInput(Number(e.target.value))}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                      className="flex h-10 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-3 py-1 text-sm font-medium focus:border-violet-400 focus:bg-white transition-all outline-none"
                     />
+                    <p className="text-[10px] text-gray-400 mt-1">Min 1, max 20 asientos por mesa</p>
                   </div>
-                  <button onClick={saveTableConfig} className="w-full h-9 rounded-md bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors">
-                    Guardar
+                  <button onClick={saveTableConfig} className="w-full h-10 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all shadow-md shadow-violet-200">
+                    Guardar cambios
                   </button>
-                  <button onClick={deleteTable} className="w-full h-9 rounded-md border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+                  <button onClick={deleteTable} className="w-full h-10 rounded-xl border-2 border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-all flex items-center justify-center gap-2">
                     <Trash2 className="w-4 h-4" /> Eliminar mesa
                   </button>
                 </div>
               </div>
             ) : (
               /* Guest list with accordion */
-              <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden" style={{ maxHeight: CANVAS_H, overflowY: 'auto' }}>
-                <div className="bg-violet-600 px-4 py-3 sticky top-0 z-10">
-                  <p className="text-white text-sm font-semibold">Lista de invitados</p>
+              <div className="bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden" style={{ maxHeight: CANVAS_H, overflowY: 'auto' }}>
+                <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-3 sticky top-0 z-10 flex items-center justify-between">
+                  <p className="text-white text-sm font-semibold">Distribucion de invitados</p>
+                  <span className="text-white/70 text-xs font-medium">{occupied + pending}/{total}</span>
                 </div>
-                <div className="p-3 space-y-1.5">
-                  {tables.map(table => {
+                <div className="p-3 space-y-2">
+                  {tables.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">Sin mesas</p>
+                  ) : tables.map(table => {
                     const isBride = table.is_bride_table;
                     const tColor = isBride && specialConfig ? specialConfig.color : (isBride ? '#f43f5e' : '#7c3aed');
                     const tLabel = isBride && specialConfig ? specialConfig.tableLabel : `Mesa ${table.table_number}`;
@@ -749,60 +783,77 @@ export default function SeatingTab({ planId }) {
 
       {/* Guest selector */}
       {showGuestSelector && selectedSeat && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30" onClick={() => { setShowGuestSelector(false); setSelectedSeat(null); }}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { setShowGuestSelector(false); setSelectedSeat(null); }}>
           <div
-            className="bg-white rounded-xl shadow-2xl w-96 max-h-[32rem] overflow-hidden flex flex-col"
+            className="bg-white rounded-2xl shadow-2xl w-96 max-h-[32rem] overflow-hidden flex flex-col border border-gray-100"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 flex-shrink-0">
-              <h3 className="font-semibold text-gray-900 text-sm">
-                {selectedSeat.assignment ? 'Asiento ocupado' : 'Asignar invitado'}
-              </h3>
-              <button onClick={() => { setShowGuestSelector(false); setSelectedSeat(null); }} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+            <div className="bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-4 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-white text-sm">
+                  {selectedSeat.assignment ? 'Asiento ocupado' : 'Asignar invitado'}
+                </h3>
+                <p className="text-white/60 text-xs mt-0.5">
+                  Mesa {selectedSeatTable?.table_number} - Asiento {(selectedSeatTable?.seats || []).indexOf(selectedSeat) + 1}
+                </p>
+              </div>
+              <button onClick={() => { setShowGuestSelector(false); setSelectedSeat(null); }} className="p-1.5 rounded-lg hover:bg-white/20 text-white/80">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-3 space-y-1 overflow-y-auto flex-1">
+            <div className="p-4 space-y-1 overflow-y-auto flex-1">
               {selectedSeat.assignment && (
-                <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+                <div className="mb-3 p-4 bg-gradient-to-br from-gray-50 to-violet-50 rounded-xl border border-violet-100">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{selectedSeat.assignment.guest_name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{selectedSeat.assignment.rsvp_status || 'Sin RSVP'}</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedSeat.assignment.guest_name}</p>
+                      <p className="text-xs text-gray-500 capitalize mt-0.5">{selectedSeat.assignment.rsvp_status || 'Sin RSVP'}</p>
                       {selectedSeat.assignment.party_size > 1 && (
-                        <p className="text-xs text-violet-600 font-medium mt-1">
-                          <Users className="w-3 h-3 inline mr-1" />
-                          {selectedSeat.assignment.party_size} personas
+                        <p className="text-xs text-violet-600 font-medium mt-1.5 flex items-center gap-1">
+                          <Users className="w-3 h-3" />
+                          {selectedSeat.assignment.party_size} personas en grupo
                         </p>
                       )}
                     </div>
                   </div>
                   <button
                     onClick={unassignGuest}
-                    className="mt-2 w-full h-8 rounded-md border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors"
+                    className="mt-3 w-full h-9 rounded-xl border-2 border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 hover:border-red-300 transition-all"
                   >
-                    Remover
+                    Remover de este asiento
                   </button>
                 </div>
               )}
               {!selectedSeat.assignment && unassignedGuests.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">Sin invitados disponibles</p>
+                <div className="text-center py-8">
+                  <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">Sin invitados disponibles</p>
+                  <p className="text-xs text-gray-300 mt-1">Todos ya estan asignados</p>
+                </div>
+              )}
+              {!selectedSeat.assignment && unassignedGuests.length > 0 && (
+                <p className="text-xs text-gray-400 font-medium mb-2">{unassignedGuests.length} invitados sin mesa</p>
               )}
               {!selectedSeat.assignment && unassignedGuests.map(g => (
                 <button
                   key={g.id}
                   onClick={() => assignGuest(g.id)}
-                  className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-violet-50 transition-colors border border-transparent hover:border-violet-200"
+                  className="w-full text-left px-4 py-3 rounded-xl hover:bg-violet-50 transition-all border-2 border-transparent hover:border-violet-200 group"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{g.name || g.full_name || g.id}</p>
-                      {g.group_name && (
-                        <p className="text-xs text-gray-500 truncate">{g.group_name}</p>
-                      )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-violet-700">{(g.name || '?')[0].toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-violet-700 transition-colors">{g.name || g.full_name || g.id}</p>
+                        {g.group_name && (
+                          <p className="text-[10px] text-gray-400 truncate">{g.group_name}</p>
+                        )}
+                      </div>
                     </div>
                     {g.party_size > 1 && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold flex-shrink-0">
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-100 text-violet-700 text-[10px] font-bold flex-shrink-0">
                         <Users className="w-3 h-3" />
                         <span>{g.party_size}</span>
                       </div>

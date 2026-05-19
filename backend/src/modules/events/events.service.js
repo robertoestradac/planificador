@@ -4,12 +4,8 @@ const { assertCredit } = require('../../utils/credits');
 
 const EventsService = {
   async create({ tenant_id, name, date, location, map_url, user }) {
-    // Owner bypasses credit checks (has unlimited access within their tenant)
-    const isOwner = user && user.role_name === 'Owner' && user.tenant_id === tenant_id;
-    
-    if (!isOwner) {
-      await assertCredit(tenant_id, 'events');
-    }
+    // All users (including Owner) must respect credit limits
+    await assertCredit(tenant_id, 'events');
     
     return EventsModel.create({ tenant_id, name, date, location, map_url });
   },
